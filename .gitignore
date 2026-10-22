@@ -2,5 +2,9 @@
 *.tmp
 build/
 build_magisk/
+build_hyperos_safe/
+build_lite/
+standalone/bin/
 *.zip
+*.tar.gz
 .DS_Store

@@ -1,0 +1,162 @@
+#!/system/bin/sh
+# ==============================================================================
+# Cloud SSD: Master Android Controller (Zero-Bootloop, Post-Boot Engine)
+# ==============================================================================
+
+INSTALL_DIR="/data/cloudssd"
+ALIST_BIN="$INSTALL_DIR/bin/alist"
+RCLONE_BIN="$INSTALL_DIR/bin/rclone"
+DATA_DIR="$INSTALL_DIR/data"
+RCLONE_CONF="$INSTALL_DIR/rclone.conf"
+MOUNT_POINT="/sdcard/TeraBox-CloudSSD"
+LOG_FILE="/data/local/tmp/cloudssd.log"
+
+mkdir -p "$DATA_DIR"
+mkdir -p "$MOUNT_POINT"
+
+log() {
+    echo "[$(date '+%H:%M:%S')] $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+ensure_rclone_conf() {
+    if [ ! -f "$RCLONE_CONF" ]; then
+        cat <<EOF > "$RCLONE_CONF"
+[terabox]
+type = webdav
+url = http://127.0.0.1:5244/dav
+vendor = other
+user = admin
+pass = admin123
+EOF
+    fi
+}
+
+start_alist() {
+    if pgrep -f "$ALIST_BIN server" >/dev/null 2>&1; then
+        echo "[!] AList is already running on port 5244."
+        return 0
+    fi
+    echo "[*] Starting AList WebDAV Middleware..."
+    "$ALIST_BIN" admin set admin123 --data "$DATA_DIR" >/dev/null 2>&1 || true
+    nohup "$ALIST_BIN" server --data "$DATA_DIR" > "$DATA_DIR/alist.log" 2>&1 &
+    sleep 3
+    if pgrep -f "$ALIST_BIN server" >/dev/null 2>&1; then
+        echo "[✓] AList started successfully!"
+        echo "    Web Dashboard: http://localhost:5244"
+        echo "    Username:      admin"
+        echo "    Password:      admin123"
+    else
+        echo "[X] Failed to start AList. Check $DATA_DIR/alist.log"
+        return 1
+    fi
+}
+
+mount_drive() {
+    ensure_rclone_conf
+
+    if ! pgrep -f "$ALIST_BIN server" >/dev/null 2>&1; then
+        start_alist
+    fi
+
+    if mount | grep -q "$MOUNT_POINT"; then
+        echo "[!] Cloud SSD is already mounted at $MOUNT_POINT"
+        return 0
+    fi
+
+    echo "[*] Mounting TeraBox Cloud SSD to $MOUNT_POINT..."
+    echo "[*] Cache Policy: Zero Disk Cache (--vfs-cache-mode off)"
+
+    "$RCLONE_BIN" mount terabox: "$MOUNT_POINT" \
+        --config "$RCLONE_CONF" \
+        --allow-other \
+        --dir-cache-time 24h \
+        --vfs-cache-mode off \
+        --buffer-size 16M \
+        --vfs-read-chunk-size 4M \
+        --vfs-read-chunk-size-limit 64M \
+        --no-modtime \
+        --daemon \
+        --log-file "/data/local/tmp/rclone_cloudssd.log" \
+        --log-level NOTICE
+
+    sleep 2
+    if mount | grep -q "$MOUNT_POINT"; then
+        echo "[✓] SUCCESS: TeraBox Cloud SSD mounted at $MOUNT_POINT"
+        echo "    Open ZArchiver or File Manager to browse your 1TB drive!"
+    else
+        echo "[!] Mount executed. If directory is empty, please ensure you linked TeraBox Cookie in AList dashboard (http://localhost:5244)."
+    fi
+}
+
+unmount_drive() {
+    echo "[*] Unmounting $MOUNT_POINT..."
+    umount -l "$MOUNT_POINT" 2>/dev/null || true
+    pkill -f "rclone mount.*TeraBox-CloudSSD" 2>/dev/null || true
+    echo "[✓] Cloud SSD unmounted."
+}
+
+stop_all() {
+    unmount_drive
+    echo "[*] Stopping AList daemon..."
+    pkill -f "$ALIST_BIN server" 2>/dev/null || true
+    echo "[✓] All Cloud SSD services stopped."
+}
+
+show_status() {
+    echo "=========================================="
+    echo "       ☁️ Cloud SSD System Status         "
+    echo "=========================================="
+    if pgrep -f "$ALIST_BIN server" >/dev/null 2>&1; then
+        echo "AList Middleware:   [ RUNNING ] (Port 5244)"
+    else
+        echo "AList Middleware:   [ STOPPED ]"
+    fi
+
+    if mount | grep -q "$MOUNT_POINT"; then
+        echo "Cloud SSD Mount:    [ MOUNTED ] -> $MOUNT_POINT"
+    else
+        echo "Cloud SSD Mount:    [ NOT MOUNTED ]"
+    fi
+    echo "=========================================="
+}
+
+open_gui() {
+    echo "[*] Opening AList Dashboard in browser..."
+    am start -a android.intent.action.VIEW -d "http://localhost:5244" >/dev/null 2>&1 || true
+}
+
+case "$1" in
+    start)
+        start_alist
+        ;;
+    mount)
+        mount_drive
+        ;;
+    unmount|umount)
+        unmount_drive
+        ;;
+    stop)
+        stop_all
+        ;;
+    status)
+        show_status
+        ;;
+    gui|web)
+        start_alist
+        open_gui
+        ;;
+    log)
+        cat "/data/local/tmp/rclone_cloudssd.log" 2>/dev/null || cat "$DATA_DIR/alist.log" 2>/dev/null || echo "No logs found."
+        ;;
+    *)
+        echo "Usage: cloudssd {start|mount|unmount|stop|status|gui|log}"
+        echo "  start    - Start AList WebDAV server (port 5244)"
+        echo "  mount    - Mount 1TB TeraBox drive to /sdcard/TeraBox-CloudSSD"
+        echo "  unmount  - Unmount Cloud SSD safely"
+        echo "  stop     - Stop all services and unmount"
+        echo "  status   - View current service & mount status"
+        echo "  gui      - Open Web Dashboard in phone browser"
+        echo "  log      - View live logs"
+        ;;
+esac
