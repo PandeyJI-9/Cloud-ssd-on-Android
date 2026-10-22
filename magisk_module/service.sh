@@ -1,121 +1,130 @@
 #!/system/bin/sh
 # ==============================================================================
-# Cloud SSD: Magisk / KernelSU / APatch Late-Start Service
-# Injects TeraBox Cloud SSD mount on boot after network connection is up
+# Cloud SSD: Bulletproof Zero-Bootloop Magisk/KernelSU Service
+# Runs strictly in late_start (after system has completely finished booting)
 # ==============================================================================
 
-MODDIR=${0%/*}
+MODDIR="${0%/*}"
 LOGFILE="/data/local/tmp/cloud_ssd_boot.log"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOGFILE"
 }
 
-log "Cloud SSD Service starting up..."
+# ------------------------------------------------------------------------------
+# SAFETY ARCHITECTURE (Guaranteed Zero-Bootloop):
+# 1. Fork background daemon immediately and exit script with return code 0.
+# 2. Never block Android boot sequence or Zygote.
+# ------------------------------------------------------------------------------
 
-# 1. Wait until boot is completed
-until [ "$(getprop sys.boot_completed)" = "1" ]; do
-    sleep 3
-done
-log "Boot completed detected."
+run_cloud_ssd_daemon() {
+    log "=== Cloud SSD Boot Service Initialized ==="
 
-# 2. Wait for internet connection (Wi-Fi or Mobile Data)
-CONNECTED=0
-RETRIES=0
-MAX_RETRIES=40
+    # 1. Wait until Android OS has completely loaded launcher & lockscreen
+    local boot_count=0
+    while [ "$(getprop sys.boot_completed)" != "1" ]; do
+        sleep 2
+        boot_count=$((boot_count + 1))
+        if [ $boot_count -gt 60 ]; then
+            log "Timeout waiting for boot_completed, proceeding with safety checks..."
+            break
+        fi
+    done
+    log "Android OS boot completed confirmed."
 
-while [ $RETRIES -lt $MAX_RETRIES ]; do
-    if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 || ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1; then
-        CONNECTED=1
-        log "Internet connectivity established."
-        break
+    # 2. Deploy WebUI shortcut to /sdcard for standard Magisk & browser users
+    if [ -d "/sdcard" ]; then
+        cp -f "$MODDIR/webroot/index.html" "/sdcard/CloudSSD-Manager.html" 2>/dev/null || true
     fi
-    RETRIES=$((RETRIES + 1))
-    sleep 3
-done
 
-if [ $CONNECTED -eq 0 ]; then
-    log "Warning: Network timeout reached. Proceeding anyway..."
-fi
+    # 3. Locate standalone binaries (Embedded inside module)
+    ALIST_BIN="$MODDIR/bin/alist"
+    RCLONE_BIN="$MODDIR/bin/rclone"
 
-# 3. Locate binaries
-ALIST_BIN=""
-RCLONE_BIN=""
+    # Fallbacks if module bin is customized
+    [ ! -x "$ALIST_BIN" ] && ALIST_BIN="$(command -v alist 2>/dev/null)"
+    [ ! -x "$RCLONE_BIN" ] && RCLONE_BIN="$(command -v rclone 2>/dev/null)"
 
-for path in /data/adb/modules/cloud_ssd_terabox/bin/alist \
-            /data/data/com.termux/files/usr/bin/alist \
-            /system/bin/alist \
-            /data/local/tmp/alist; do
-    if [ -x "$path" ]; then
-        ALIST_BIN="$path"
-        break
+    if [ ! -x "$ALIST_BIN" ] || [ ! -x "$RCLONE_BIN" ]; then
+        log "Error: Required binaries (alist/rclone) not executable. Aborting safely."
+        exit 0
     fi
-done
 
-for path in /data/adb/modules/cloud_ssd_terabox/bin/rclone \
-            /data/data/com.termux/files/usr/bin/rclone \
-            /system/bin/rclone \
-            /data/local/tmp/rclone; do
-    if [ -x "$path" ]; then
-        RCLONE_BIN="$path"
-        break
-    fi
-done
+    # 4. Wait for internet connection (Wi-Fi or Mobile Data)
+    local net_retries=0
+    local has_internet=0
+    while [ $net_retries -lt 30 ]; do
+        if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 || ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1; then
+            has_internet=1
+            log "Internet connection detected."
+            break
+        fi
+        net_retries=$((net_retries + 1))
+        sleep 4
+    done
 
-log "AList binary: $ALIST_BIN"
-log "Rclone binary: $RCLONE_BIN"
+    # 5. Start AList Daemon on Port 5244
+    ALIST_DATA="/data/adb/cloud_ssd/alist_data"
+    mkdir -p "$ALIST_DATA"
 
-# 4. Start AList if binary exists and not already running
-ALIST_DATA="/data/adb/cloud_ssd/alist_data"
-mkdir -p "$ALIST_DATA"
-
-if [ -n "$ALIST_BIN" ]; then
-    if ! pgrep -x "alist" >/dev/null; then
-        log "Starting AList daemon..."
+    if ! pgrep -f "$ALIST_BIN server" >/dev/null 2>&1; then
+        log "Starting embedded AList daemon..."
+        "$ALIST_BIN" admin set admin123 --data "$ALIST_DATA" >/dev/null 2>&1 || true
         nohup "$ALIST_BIN" server --data "$ALIST_DATA" > "$ALIST_DATA/alist.log" 2>&1 &
-        sleep 3
-    else
-        log "AList is already running."
+        sleep 4
     fi
-fi
 
-# 5. Mount Cloud SSD into Global Namespace
-MOUNT_POINT="/sdcard/TeraBox-CloudSSD"
-mkdir -p "$MOUNT_POINT"
-
-RCLONE_CONF="/data/adb/cloud_ssd/rclone.conf"
-if [ ! -f "$RCLONE_CONF" ]; then
-    # Fallback to Termux config if exists
-    if [ -f "/data/data/com.termux/files/home/.config/rclone/rclone.conf" ]; then
-        RCLONE_CONF="/data/data/com.termux/files/home/.config/rclone/rclone.conf"
-    fi
-fi
-
-if [ -n "$RCLONE_BIN" ] && [ -f "$RCLONE_CONF" ]; then
-    log "Mounting TeraBox via Rclone into Global Namespace..."
+    # 6. Check if default rclone config exists
+    RCLONE_CONF="/data/adb/cloud_ssd/rclone.conf"
+    mkdir -p "/data/adb/cloud_ssd"
     
-    # Inject into PID 1 Init namespace so all apps can access the mount
-    nsenter -t 1 -m -- "$RCLONE_BIN" mount terabox: "$MOUNT_POINT" \
-        --config "$RCLONE_CONF" \
-        --allow-other \
-        --dir-cache-time 24h \
-        --attr-timeout 1h \
-        --vfs-cache-mode off \
-        --buffer-size 16M \
-        --vfs-read-chunk-size 4M \
-        --vfs-read-chunk-size-limit 64M \
-        --no-modtime \
-        --daemon \
-        --log-file "/data/local/tmp/rclone_boot_mount.log" \
-        --log-level NOTICE
-
-    log "Mount executed. Checking status..."
-    sleep 2
-    if mount | grep -q "$MOUNT_POINT"; then
-        log "Cloud SSD mounted successfully at $MOUNT_POINT"
-    else
-        log "Mount verification failed. Check /data/local/tmp/rclone_boot_mount.log"
+    # Auto-generate rclone WebDAV config for AList if missing
+    if [ ! -f "$RCLONE_CONF" ]; then
+        log "Creating default rclone.conf for AList WebDAV loopback..."
+        cat <<EOF > "$RCLONE_CONF"
+[terabox]
+type = webdav
+url = http://127.0.0.1:5244/dav
+vendor = other
+user = admin
+pass = admin123
+EOF
     fi
-else
-    log "Error: Missing Rclone binary or rclone.conf"
-fi
+
+    # 7. Mount Cloud SSD into Android Global PID 1 Init Namespace
+    MOUNT_POINT="/sdcard/TeraBox-CloudSSD"
+    mkdir -p "$MOUNT_POINT"
+
+    if ! mount | grep -q "$MOUNT_POINT"; then
+        log "Injecting Rclone FUSE mount into Global Mount Namespace..."
+        
+        # Zero internal storage cache policy: --vfs-cache-mode off
+        if command -v nsenter >/dev/null 2>&1; then
+            nsenter -t 1 -m -- "$RCLONE_BIN" mount terabox: "$MOUNT_POINT" \
+                --config "$RCLONE_CONF" \
+                --allow-other \
+                --dir-cache-time 24h \
+                --vfs-cache-mode off \
+                --buffer-size 16M \
+                --vfs-read-chunk-size 4M \
+                --vfs-read-chunk-size-limit 64M \
+                --no-modtime \
+                --daemon \
+                --log-file "/data/local/tmp/rclone_boot.log" \
+                --log-level NOTICE
+        fi
+    fi
+
+    sleep 3
+    if mount | grep -q "$MOUNT_POINT"; then
+        log "✓ Cloud SSD successfully mounted at $MOUNT_POINT"
+    else
+        log "Notice: Mount waiting for TeraBox configuration in AList dashboard."
+    fi
+
+    log "=== Cloud SSD Service Startup Completed ==="
+}
+
+# Run completely detached in background
+run_cloud_ssd_daemon >/dev/null 2>&1 &
+exit 0

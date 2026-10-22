@@ -1,5 +1,6 @@
 *.log
 *.tmp
 build/
+build_magisk/
 *.zip
 .DS_Store

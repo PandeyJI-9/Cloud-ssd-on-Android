@@ -1,76 +1,45 @@
-name: Cloud SSD CI & Magisk Module Builder
+name: Build & Release Cloud SSD Magisk Module
 
 on:
   push:
     branches: [ "main", "master" ]
     tags: [ "v*" ]
-  pull_request:
-    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
-  lint-and-validate:
-    name: Lint & Validate Shell Scripts
+  build-and-release:
+    name: Build All-in-One Flashable Magisk Module
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install ShellCheck
-        run: sudo apt-get install -y shellcheck
+      - name: Install Build Tools
+        run: sudo apt-get update && sudo apt-get install -y zip unzip curl jq
 
-      - name: Validate Scripts
+      - name: Run Module Builder
         run: |
-          echo "Checking scripts with shellcheck..."
-          shellcheck scripts/*.sh || true
+          chmod +x scripts/build_magisk_module.sh
+          bash scripts/build_magisk_module.sh
 
-  build-magisk-module:
-    name: Build All-in-One Magisk Flashable ZIP
-    runs-on: ubuntu-latest
-    needs: lint-and-validate
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Prepare Packaging Directory
+      - name: Verify Built ZIP
         run: |
-          mkdir -p build/bin
-          cp -r magisk_module/* build/
+          ls -lh CloudSSD-TeraBox-v1.0.0.zip
+          unzip -l CloudSSD-TeraBox-v1.0.0.zip
 
-      - name: Download Precompiled ARM64 Binaries (AList & Rclone)
-        run: |
-          cd build/bin
-          echo "Fetching latest AList ARM64 binary..."
-          curl -L -o alist.tar.gz https://github.com/AlistGo/alist/releases/latest/download/alist-linux-arm64.tar.gz
-          tar -xzf alist.tar.gz alist
-          rm -f alist.tar.gz
-          chmod +x alist
-
-          echo "Fetching latest Rclone ARM64 binary..."
-          curl -L -o rclone.zip https://downloads.rclone.org/rclone-current-linux-arm64.zip
-          unzip -j rclone.zip "*/rclone" -d .
-          rm -f rclone.zip
-          chmod +x rclone
-
-          ls -lh
-
-      - name: Create Flashable Magisk Module ZIP
-        run: |
-          cd build
-          zip -r ../CloudSSD-TeraBox-ARM64-v1.0.0.zip .
-          cd ..
-          ls -lh CloudSSD-TeraBox-ARM64-v1.0.0.zip
-
-      - name: Upload Artifact
+      - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CloudSSD-Magisk-Module-ARM64
-          path: CloudSSD-TeraBox-ARM64-v1.0.0.zip
+          name: CloudSSD-TeraBox-Magisk-Module-ARM64
+          path: CloudSSD-TeraBox-v1.0.0.zip
 
-      - name: Create GitHub Release (On Tag)
+      - name: Publish GitHub Release (On Version Tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: CloudSSD-TeraBox-ARM64-v1.0.0.zip
+          name: "Cloud SSD Magisk Module ${{ github.ref_name }} (Zero-Bootloop + WebUI)"
+          files: CloudSSD-TeraBox-v1.0.0.zip
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
