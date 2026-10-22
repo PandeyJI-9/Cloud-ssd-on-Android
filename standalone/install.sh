@@ -32,9 +32,15 @@ echo "[3/4] Installing global 'cloudssd' command..."
 cp -f "$DIR/cloudssd" "$TARGET/cloudssd"
 chmod 755 "$TARGET/cloudssd"
 
-# Link to common executable paths
-for p in /data/adb/ap/bin /system/bin /data/data/com.termux/files/usr/bin /data/local/tmp; do
-    if [ -d "$p" ] && [ -w "$p" ]; then
+# Install into Termux bin if present
+TERMUX_BIN="/data/data/com.termux/files/usr/bin"
+if [ -d "$TERMUX_BIN" ]; then
+    cp -f "$TARGET/cloudssd" "$TERMUX_BIN/cloudssd" 2>/dev/null && chmod 755 "$TERMUX_BIN/cloudssd" 2>/dev/null || true
+fi
+
+# Link to other root PATH directories
+for p in /data/adb/ap/bin /data/adb/magisk /sbin /data/local/tmp; do
+    if [ -d "$p" ]; then
         cp -f "$TARGET/cloudssd" "$p/cloudssd" 2>/dev/null && chmod 755 "$p/cloudssd" 2>/dev/null || true
     fi
 done
