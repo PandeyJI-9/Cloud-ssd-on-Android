@@ -1,0 +1,6 @@
+id=cloud_ssd_terabox
+name=Cloud SSD - TeraBox 1TB Auto-Mounter
+version=v1.0.0
+versionCode=100
+author=CloudSSD Team
+description=Mounts TeraBox 1TB cloud storage as a virtual SSD into Android global mount namespace on boot. Zero phone storage consumed.
