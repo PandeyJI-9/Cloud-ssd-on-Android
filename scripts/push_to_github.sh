@@ -15,20 +15,12 @@ echo -e "${GREEN}====================================================${NC}"
 echo -e "${GREEN}       Cloud SSD: GitHub Push Automation            ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 
-GH_USER="$1"
-GH_REPO="$2"
+GH_USER="${1:-PandeyJI-9}"
+GH_REPO="${2:-Cloud-ssd-on-Android}"
 GH_TOKEN="$3"
 
-if [ -z "$GH_USER" ]; then
-    read -p "Enter your GitHub Username: " GH_USER
-fi
-
-if [ -z "$GH_REPO" ]; then
-    read -p "Enter your GitHub Repository Name (e.g., cloud-ssd): " GH_REPO
-fi
-
 if [ -z "$GH_TOKEN" ]; then
-    read -s -p "Enter your GitHub Personal Access Token (PAT) [Press Enter for normal prompt]: " GH_TOKEN
+    read -s -p "Enter your GitHub Personal Access Token (PAT): " GH_TOKEN
     echo ""
 fi
 
@@ -40,21 +32,16 @@ fi
 
 cd "$(dirname "$0")/.."
 
-# Initialize git if not already
-if [ ! -d ".git" ]; then
-    echo -e "${BLUE}[*] Initializing local git repository...${NC}"
-    git init
-    git branch -M main
-    git config user.name "$GH_USER"
-    git config user.email "${GH_USER}@users.noreply.github.com"
-fi
+# Set git identity
+git config user.name "$GH_USER"
+git config user.email "${GH_USER}@users.noreply.github.com"
 
 echo -e "${BLUE}[*] Staging all files...${NC}"
 git add .
 
 if ! git diff-index --quiet HEAD -- 2>/dev/null; then
     echo -e "${BLUE}[*] Creating commit...${NC}"
-    git commit -m "feat: complete cloud ssd terabox mounter for android with magisk and termux"
+    git commit -m "feat: complete cloud ssd setup for PandeyJI-9/Cloud-ssd-on-Android"
 else
     echo -e "${YELLOW}[!] Working tree clean, nothing new to commit.${NC}"
 fi
@@ -77,7 +64,7 @@ fi
 echo -e "\n${YELLOW}[*] Pushing to GitHub (main branch)...${NC}"
 git push -u origin main
 
-# Remove token from stored remote URL for safety
+# Clean token from stored remote URL for safety
 git remote set-url origin "https://github.com/${GH_USER}/${GH_REPO}.git"
 
 echo -e "\n${GREEN}====================================================${NC}"

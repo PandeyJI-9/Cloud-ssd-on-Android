@@ -1,91 +1,46 @@
-# ☁️ Cloud SSD: TeraBox 1TB Mount on Android (Root & Termux)
+# ☁️ Cloud SSD on Android
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Linux-brightgreen.svg)](#)
-[![Root](https://img.shields.io/badge/Root-Magisk%20%7C%20KernelSU%20%7C%20APatch-orange.svg)](#)
-[![Termux](https://img.shields.io/badge/Environment-Termux%20(F--Droid)-black.svg)](#)
-[![CI Build](https://img.shields.io/badge/GitHub%20Actions-Automated%20Build-blue.svg)](#)
+[![GitHub Stars](https://img.shields.io/github/stars/PandeyJI-9/Cloud-ssd-on-Android?style=flat-square)](https://github.com/PandeyJI-9/Cloud-ssd-on-Android/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/PandeyJI-9/Cloud-ssd-on-Android?style=flat-square)](https://github.com/PandeyJI-9/Cloud-ssd-on-Android/network/members)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Linux-brightgreen.svg?style=flat-square)](#)
+[![Root](https://img.shields.io/badge/Root-Magisk%20%7C%20KernelSU%20%7C%20APatch-orange.svg?style=flat-square)](#)
+[![Termux](https://img.shields.io/badge/Environment-Termux%20(F--Droid)-black.svg?style=flat-square)](#)
 
-> **No Sugar-Coating, 10000% Raw Technical Reality & Working Implementation**  
-> Is repo me TeraBox 1TB free cloud storage ko Android me **Virtual Cloud SSD** ki tarah mount karne ka complete, tested framework aur architecture diya gaya hai.
+> **TeraBox 1TB Cloud Storage ko Android me ek Virtual SSD ki tarah mount karo — Zero Internal Storage impact ke sath!**
+
+Is project se tum TeraBox ke 1TB free cloud storage ko apne phone me ek **external drive / virtual SSD** ki tarah mount kar sakte ho. Ye Termux aur Rooted devices (Magisk / KernelSU / APatch) dono par perfectly kaam karta hai.
 
 ---
 
 ## 📑 Table of Contents
-1. [⚡ The Brutal Reality: YouTube Myths vs Computer Science](#-the-brutal-reality-youtube-myths-vs-computer-science)
-2. [🎯 What Works vs What Will Crash (Feasibility Matrix)](#-what-works-vs-what-will-crash-feasibility-matrix)
-3. [🏗️ Cloud SSD Architecture on Android](#️-cloud-ssd-architecture-on-android)
-4. [🔍 Reverse Engineering TeraBox & REA Tool](#-reverse-engineering-terabox--rea-tool)
-5. [🚀 Complete Step-by-Step Installation Guide](#-complete-step-by-step-installation-guide)
+1. [✨ Key Features](#-key-features)
+2. [🏗️ System Architecture](#️-system-architecture)
+3. [🎯 Best Use-Cases (What Works Best)](#-best-use-cases-what-works-best)
+4. [📋 Prerequisites](#-prerequisites)
+5. [📱 How to Extract TeraBox Cookie on Mobile (No PC Required)](#-how-to-extract-terabox-cookie-on-mobile-no-pc-required)
+6. [🚀 Installation Guide](#-installation-guide)
    - [Method 1: Termux Setup (Quick & Direct)](#method-1-termux-setup-quick--direct)
-   - [Method 2: Magisk/KernelSU Module (Permanent Reboot Setup)](#method-2-magiskkernelsu-module-permanent-reboot-setup)
-   - [How to get TeraBox Cookie on Mobile](#how-to-get-terabox-cookie-on-mobile-without-pc)
-6. [🛠️ Scripts & Project Structure](#️-scripts--project-structure)
-7. [🤖 GitHub Actions Support (Zero Phone Heating)](#-github-actions-support-zero-phone-heating)
-8. [🚀 How to Push this Project to Your GitHub](#-how-to-push-this-project-to-your-github)
+   - [Method 2: Magisk/KernelSU Module (Permanent Reboot Mount)](#method-2-magiskkernelsu-module-permanent-reboot-mount)
+7. [🛠️ Project & Scripts Structure](#️-project--scripts-structure)
+8. [🤖 GitHub Actions Automated Cloud Builder](#-github-actions-automated-cloud-builder)
+9. [❓ Troubleshooting & FAQ](#-troubleshooting--faq)
 
 ---
 
-## ⚡ The Brutal Reality: YouTube Myths vs Computer Science
+## ✨ Key Features
 
-YouTubers jo dikhate hain ki *"Bhai bina phone/PC storage use kare 100GB ka GTA V ya Genshin Impact Cloud SSD se chala diya"*, uske piche ka **asli sach (No Sugar-Coating)** samjho:
-
-```
-+-----------------------------------------------------------------------------------------+
-|                                    THE YOUTUBE ILLUSION                                 |
-|                                                                                         |
-|  [ YouTuber's Claim ]                                                                   |
-|  "Game cloud me installed hai, phone ki 1 MB storage bhi use nahi ho rahi!"             |
-|                                                                                         |
-|  [ Reality Behind the Scenes ]                                                          |
-|  Rclone Flag: --vfs-cache-mode full                                                     |
-|  --> Rclone silently downloads game chunks into Local Internal Storage (Cache Folder)!  |
-|  --> Internal storage par hi 30-60 GB download hota rehta hai background me.            |
-|  --> Agar cache band kar doge (--vfs-cache-mode off), to game CRASH ho jayega!         |
-+-----------------------------------------------------------------------------------------+
-```
-
-### 1. Latency (Ping) Difference: 0.1ms vs 200ms
-* **Local Phone Storage (UFS 3.1 / UFS 4.0):** 
-  - Latency: **< 0.05 milliseconds**
-  - Speed: **2,000 MB/s - 4,200 MB/s**
-  - Random 4K Reads: **100,000+ IOPS**
-* **TeraBox Cloud Storage (over HTTP API):**
-  - Latency: **150ms - 300ms** per request
-  - Free Speed: **100 KB/s - 400 KB/s** (Throttled by TeraBox servers)
-  - Random 4K Reads: **< 10 IOPS**
-
-**Kya hota hai jab game chalta hai?**  
-Game engine (Unreal Engine / Unity) har second hazaaron 3D textures, sounds, aur shader chunks load karta hai.
-- Agar local SSD par 50MB texture load hona hai: **0.02 second** lagta hai.
-- Agar TeraBox Free Tier (250 KB/s) par 50MB texture bina cache load hoga: **200 seconds (~3.3 MINUTES)** lagte hain!
-- Android OS ka Watchdog detect karega ki UI thread freeze ho gaya hai aur instant **ANR (Application Not Responding) Crash** de dega!
-
-### 2. Android OS Security & Filesystem Restrictions
-1. **SELinux & Native Code (`dlopen`):**
-   Android native apps/games (`.so` libraries) ko run karne ke liye Linux kernel `PROT_EXEC` (execute permission) mangta hai. Android me user FUSE mounts par security reasons se `noexec` enforce rehta hai. Isliye directly `.apk` ya uski libraries cloud FUSE par install karke execute nahi ki ja sakti.
-2. **Mount Namespaces (Why mounts disappear for other apps):**
-   Android har application ko Zygote se ek alag **Mount Namespace** me spawn karta hai. Agar tum Termux me standard tarike se mount karoge, to wo **sirf Termux ko dikhega**; ZArchiver, Gallery, File Manager, ya kisi game ko folder khali (empty) dikhega.
-   Is problem ko solve karne ke liye **Root Namespace Injection (`nsenter -t 1 -m` ya `su -mm`)** zaroori hai.
+- 💾 **1TB (1024 GB) Virtual Storage:** TeraBox free tier ko direct storage drive ki tarah mount karta hai.
+- 🛡️ **Zero Internal Storage Waste:** `--vfs-cache-mode off` policy use hoti hai, jisse phone ki internal flash memory ka ek bhi GB buffer ya cache me waste nahi hota.
+- 🔄 **Global Mount Namespace Injection:** `nsenter -t 1 -m` aur `su -mm` se Android ke PID 1 (Init) me mount inject hota hai, jisse **ZArchiver, Solid Explorer, MiXplorer, aur Emulators** sabhi ko drive alag se dikhti hai.
+- ⚡ **Reboot Persistence:** Magisk / KernelSU late-start service phone reboot hone ke baad internet connect hote hi drive ko auto-mount kar deti hai.
+- ☁️ **No Phone Overheating:** Bhari build ya binary compilation phone par nahi hoti; GitHub Actions cloud runners par automatic package ho jata hai.
 
 ---
 
-## 🎯 What Works vs What Will Crash (Feasibility Matrix)
+## 🏗️ System Architecture
 
-| Use Case | Kya Chalega? | Kitna Practical Hai? | Kyon? |
-| :--- | :---: | :---: | :--- |
-| **Retro & Emulator ROMs (PPSSPP, GBA, PS1, N64, RetroArch)** | ✅ **100% YES** | 🔥 **Best Experience** | ROM pura RAM me load ho jata hai (10MB-700MB). Ek baar load hone ke baad koi lag nahi. |
-| **Movie / Anime / Music Streaming (VLC, MX Player)** | ✅ **100% YES** | 🔥 **Flawless** | Video players sequential buffering use karte hain. 1080p/720p movies bina phone storage bhare stream hongi. |
-| **File Archiving / Backup / Unrar on demand** | ✅ **100% YES** | ⭐ **Excellent** | Cloud SSD me alag drive banke dikhega, 1TB free storage for photos/ISOs/backups. |
-| **Lightweight PC Games (Visual Novels, Turn-based via Winlator)** | ⚠️ **Partial** | 🟡 **Condition Applied** | Agar asset streaming heavy nahi hai to chal jayega. |
-| **Heavy Android Games (Genshin, BGMI, CoD) directly on Cloud** | ❌ **IMPOSSIBLE** | 🛑 **Zero Viability** | Random 4K I/O stall, 300ms latency, TeraBox 250KB/s speed limit se 10 second me game ANR crash marega. |
-| **PC Games (GTA V, Cyberpunk via Mobox/Winlator) with 0% Cache** | ❌ **IMPOSSIBLE** | 🛑 **Zero Viability** | Winlator freeze ho jayega loading screen par hi. Cache on karoge to phone ka internal storage bhar jayega. |
-
----
-
-## 🏗️ Cloud SSD Architecture on Android
-
-TeraBox ka koi direct official WebDAV ya Linux mount support nahi hai. Humne iske liye 3-tier production architecture design kiya hai:
+TeraBox official WebDAV provide nahi karta, isliye humne robust 3-Tier architecture design kiya hai:
 
 ```
 +-------------------------------------------------------------------------------+
@@ -119,78 +74,90 @@ TeraBox ka koi direct official WebDAV ya Linux mount support nahi hai. Humne isk
 
 ---
 
-## 🔍 Reverse Engineering TeraBox & REA Tool
+## 🎯 Best Use-Cases (What Works Best)
 
-Humne **REA (Reverse Engineer Anything)** (`morluto/rea`) framework aur API analysis use kiya hai:
-1. **Session Cookie (`ndus`):** TeraBox user login state ko `ndus=...` cookie me verify karta hai.
-2. **Tokens (`bdstoken` & `jsToken`):** CSRF verification tokens.
-3. **Download URL Generation:** Web API `/api/download` request leti hai `fs_id` ke sath aur direct CDN mirror URL return karti hai.
-4. **Anti-Bot Throttling:** Multi-thread parallel download ke dauran TeraBox user-agent verification mangta hai. AList is sabko internally bridge karta hai.
+| Use Case | Status | Kitna Smooth Hai? |
+| :--- | :---: | :--- |
+| **Retro & Emulator ROMs (PPSSPP, GBA, PS1, NDS, RetroArch)** | ✅ **YES** | 🔥 **Super Smooth:** ROM start hote hi RAM me load ho jati hai (10MB–700MB). Ek baar load hone ke baad zero lag! |
+| **Media Streaming (VLC, MX Player, Nova)** | ✅ **YES** | 🔥 **Flawless:** 1080p/720p Movies, Anime, FLAC music phone storage bina bhare sequential stream hote hain. |
+| **File Archiving / Backups / ISOs** | ✅ **YES** | ⭐ **Excellent:** Photos, APK collections, aur badi files direct 1TB cloud me store rahengi. |
+| **Heavy 3D Android Games (Genshin, BGMI) installed directly** | ❌ **NO** | 🛑 Android OS security (`noexec`), `dlopen` requirements, aur network latency ke kaaran heavy games internal storage mangte hain. |
+
+---
+
+## 📋 Prerequisites
+
+1. **Android Device:** Rooted (Magisk, KernelSU, ya APatch) recommended for permanent mount across all apps. Termux-only non-root bhi chalega Termux apps ke liye.
+2. **Termux App:** [F-Droid](https://f-droid.org/en/packages/com.termux/) ya GitHub releases wala Termux install karo (Play Store version outdated hai).
+3. **TeraBox Account:** Free 1TB account.
 
 ---
 
-## 🚀 Complete Step-by-Step Installation Guide
+## 📱 How to Extract TeraBox Cookie on Mobile (No PC Required)
 
-### Prerequisite Checklist:
-- [x] Android device (Rooted with Magisk, KernelSU, ya APatch for permanent mount; non-root user for Termux only).
-- [x] Termux app (F-Droid version, Google Play Store version nahi).
-- [x] TeraBox Account (1TB Free).
+1. Apne phone me **Kiwi Browser** ya **Firefox Nightly** install karo (jo extensions support karta hai).
+2. Chrome Web Store se **Cookie-Editor** extension add karo.
+3. [terabox.com](https://www.terabox.com) par jao aur login karo.
+4. Cookie-Editor extension icon par tap karo.
+5. Cookie list me se `ndus` cookie (ya full Cookie string) copy kar lo.
+6. AList setup ke dauran is cookie ko paste kar dena.
 
 ---
+
+## 🚀 Installation Guide
 
 ### Method 1: Termux Setup (Quick & Direct)
 
-#### Step 1: Termux Packages & AList Install
-Termux open karo aur ye commands run karo:
+#### Step 1: Repo Clone & Dependency Installation
+Termux open karo aur run karo:
 ```bash
 # Repo clone karo
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git cloud-ssd
+git clone https://github.com/PandeyJI-9/Cloud-ssd-on-Android.git cloud-ssd
 cd cloud-ssd
 
-# Dependencies aur AList ARM64 binary auto-install karo
+# Dependencies (Rclone, FUSE3, AList ARM64 binary) install karo
 bash scripts/install_dependencies_termux.sh
 ```
 
-#### Step 2: AList Background Service Start Karo
+#### Step 2: AList Middleware Start Karo
 ```bash
 bash scripts/start_alist.sh
 ```
-Ab Termux me show hoga:
-- **Dashboard URL:** `http://127.0.0.1:5244`
-- **Username:** `admin`
-- **Default Password:** `admin123` *(agar change karna ho: `alist admin set YOUR_PASSWORD`)*
+Screen par ye details dikhayi dengi:
+- **Web UI URL:** `http://127.0.0.1:5244`
+- **Default Username:** `admin`
+- **Default Password:** `admin123` *(change karne ke liye: `alist admin set YOUR_PASS`)*
 
-#### Step 3: AList me TeraBox Mount Karo
-1. Phone ke Chrome/Firefox browser me jao aur open karo: `http://localhost:5244`
-2. Login karo (`admin` / `admin123`).
-3. Sidebar me **Manage** par click karo -> **Storages** -> **Add**.
-4. **Driver**: `TeraBox` select karo.
-5. **Mount Path**: `/terabox`
-6. **Cookie**: Apni TeraBox ki cookie paste karo (Neeche cookie guide dekho).
-7. **Download API**: `Crack` select karo.
-8. **Save** par click karo. Status **work** aana chahiye!
+#### Step 3: AList me TeraBox Link Karo
+1. Mobile browser me `http://localhost:5244` open karo aur login karo.
+2. Sidebar me **Manage -> Storages -> Add** par jao.
+3. **Driver**: `TeraBox` select karo.
+4. **Mount Path**: `/terabox`
+5. **Cookie**: Apni copy ki hui TeraBox `ndus` cookie paste karo.
+6. **Download API**: `Crack` select karo.
+7. **Save** par click karo. Status **work** aana chahiye!
 
-#### Step 4: Rclone WebDAV Remote Configure Karo
+#### Step 4: Rclone WebDAV Configure Karo
 Termux me run karo:
 ```bash
 rclone config
 ```
-Ye options choose karo:
+Ye simple options select karo:
 - `n` (New remote)
 - Name: `terabox`
 - Storage type: `webdav`
 - URL: `http://127.0.0.1:5244/dav`
 - Vendor: `other`
 - User: `admin`
-- Password: `y` (enter your AList password)
-- Baaki sab settings ke liye `Enter` press karte jao.
+- Password: `y` (AList ka password enter karo)
+- Baki options me `Enter` press karte jao jab tak finish na ho jaye.
 
-#### Step 5: Mount Execute Karo (Zero Internal Storage Impact!)
+#### Step 5: Mount Execute Karo
 ```bash
 bash scripts/mount_terabox.sh
 ```
-Ab apne phone ka **ZArchiver**, **Solid Explorer**, ya **MiXplorer** open karo:
-Tumhe `/sdcard/TeraBox-CloudSSD` me tumhari 1TB cloud storage dikhayi degi!
+Ab apna **ZArchiver**, **Solid Explorer**, ya **MiXplorer** open karo:
+`/sdcard/TeraBox-CloudSSD` par tumhara 1TB Cloud SSD ready hai!
 
 Unmount karne ke liye:
 ```bash
@@ -199,74 +166,64 @@ bash scripts/unmount_terabox.sh
 
 ---
 
-### Method 2: Magisk/KernelSU Module (Permanent Reboot Setup)
+### Method 2: Magisk/KernelSU Module (Permanent Reboot Mount)
 
-Agar tum chahte ho ki **phone restart hone ke baad bhi Cloud SSD automatically mount rahe** aur har app me visible rahe:
+Agar tum chahte ho ki **phone switch off ya restart hone ke baad bhi Cloud SSD automatically mount rahe**:
 
-1. Humne ready-to-use Magisk module structure banaya hai: `magisk_module/`.
-2. Module automatically:
-   - Wi-Fi/Internet connect hone ka wait karega.
-   - Background me AList start karega.
-   - Android ke **Global Mount Namespace (`nsenter -t 1 -m`)** me mount karega taaki sabhi applications ko drive permanently dikhe!
-3. Flashable ZIP GitHub Actions me automatic build ho jata hai (Neeche dekho).
-
----
-
-### How to get TeraBox Cookie on Mobile (Without PC)
-
-1. Apne phone me **Kiwi Browser** ya **Firefox Nightly** install karo (jo extensions support karta hai).
-2. Chrome Web Store se **"Cookie-Editor"** extension install karo.
-3. `terabox.com` par jao aur login karo.
-4. Cookie-Editor extension par tap karo aur **Export as Header String** ya `ndus` cookie copy kar lo.
-5. AList ke Dashboard me paste kar do.
+1. Humne ready-made Magisk module template banaya hai: [`magisk_module/`](magisk_module/).
+2. Ye module Android boot hone ke baad:
+   - Wi-Fi/Mobile internet connect hone ka wait karega.
+   - Background me AList service ko boot karega.
+   - Android ke **PID 1 Global Mount Namespace (`nsenter -t 1 -m`)** me mount karega taaki phone ki sabhi apps (Emulators, File Managers) ko ye drive permanently dikhe.
+3. Flashable `.zip` GitHub Actions se direct download kiya ja sakta hai (Neeche section dekho).
 
 ---
 
-## 🛠️ Scripts & Project Structure
+## 🛠️ Project & Scripts Structure
 
 ```
-/workspace/cloud-ssd/
-├── README.md                           # Complete Guide & Architectural Reality
+Cloud-ssd-on-Android/
+├── README.md                           # Main Documentation & Step-by-Step Guide
 ├── docs/
-│   ├── BRUTAL_TRUTH_VS_YT_MYTHS.md     # Deep dive into Latency, Bandwidth & Cache
-│   └── REVERSE_ENGINEERING_TERABOX.md  # TeraBox API, Token mechanics & REA details
+│   ├── BRUTAL_TRUTH_VS_YT_MYTHS.md     # Technical breakdown of Latency vs Speed
+│   └── REVERSE_ENGINEERING_TERABOX.md  # TeraBox API internals & REA architecture
 ├── scripts/
-│   ├── install_dependencies_termux.sh  # Automated setup for Termux (AList + Rclone)
+│   ├── install_dependencies_termux.sh  # Automated AList + Rclone installer for Termux
 │   ├── start_alist.sh                  # AList background service runner
-│   ├── mount_terabox.sh               # Optimized Rclone FUSE mounting script
-│   ├── unmount_terabox.sh             # Clean unmount & process killer
-│   └── push_to_github.sh              # 1-Click push automation script for GitHub
+│   ├── mount_terabox.sh               # Optimized Rclone FUSE mounter (Zero cache)
+│   ├── unmount_terabox.sh             # Clean unmount script
+│   └── push_to_github.sh              # 1-Click GitHub push helper
 ├── magisk_module/
 │   ├── module.prop                     # Magisk/KernelSU Module metadata
-│   ├── service.sh                      # Universal boot service script (Global NS)
+│   ├── service.sh                      # Universal boot service (Survives reboot)
 │   └── customize.sh                    # Installation hook
 └── .github/
     └── workflows/
-        └── ci_and_build.yml            # GitHub Actions workflow for zero-phone-load builds
+        └── ci_and_build.yml            # GitHub Actions (Builds Magisk zip on cloud runners)
 ```
 
 ---
 
-## 🤖 GitHub Actions Support (Zero Phone Heating)
+## 🤖 GitHub Actions Automated Cloud Builder
 
-Humne `.github/workflows/ci_and_build.yml` configure kar diya hai:
-* Ye phone par koi heavy compilation nahi karega.
-* GitHub ke cloud runners par ARM64 binaries automatically download karke **Flashable Magisk ZIP (`CloudSSD-TeraBox-ARM64-v1.0.0.zip`)** build kar dega.
-* Releases section me direct download link mil jayega!
+Phone ko garam kiye bina ya heavy build chalaye bina:
+- Har release/tag par GitHub Actions cloud runners par ARM64 binaries fetch karke **All-in-One Flashable Magisk ZIP (`CloudSSD-TeraBox-ARM64-v1.0.0.zip`)** build kar dega.
+- Tum simply repo ke **Releases** tab se zip download karke Magisk / KernelSU app me flash kar sakte ho!
 
 ---
 
-## 🚀 How to Push this Project to Your GitHub
+## ❓ Troubleshooting & FAQ
 
-### Option 1: Direct 1-Line Script (Easiest)
-Workspace me helper script run karo:
-```bash
-bash scripts/push_to_github.sh <YOUR_GITHUB_USERNAME> <YOUR_REPO_NAME> <YOUR_TOKEN>
-```
+#### Q: File Manager me folder khali (empty) dikh raha hai?
+- Root permission verify karo. Non-root user sirf Termux terminal me files dekh sakta hai. Sabhi apps me dekhne ke liye `nsenter -t 1 -m` ya Magisk module zaroori hai.
 
-### Option 2: Manual Git Commands
-```bash
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
-git branch -M main
-git push -u origin main
-```
+#### Q: TeraBox Cookie expire ho gayi to kya karein?
+- Browser se naya `ndus` cookie nikal kar AList dashboard (`http://localhost:5244`) me **Storages -> TeraBox -> Edit** karke update kar do.
+
+#### Q: Phone ki internal storage use to nahi hogi?
+- Bilkul nahi! Mount flag `--vfs-cache-mode off` set hai. Data direct RAM buffer me stream hota hai, storage me nahi.
+
+---
+
+## 📜 License
+MIT License. Created & maintained for power users by [PandeyJI-9](https://github.com/PandeyJI-9).
