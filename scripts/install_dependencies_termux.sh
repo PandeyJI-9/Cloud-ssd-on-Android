@@ -2,6 +2,7 @@
 # ==============================================================================
 # Cloud SSD: Termux Setup & Dependency Installer
 # Installs Rclone, FUSE3, and downloads prebuilt AList binary for ARM64/ARM
+# With rigorous download verification & trap cleanup
 # ==============================================================================
 
 set -e
@@ -26,11 +27,11 @@ fi
 # 1. Update and install dependencies
 echo -e "\n${YELLOW}[1/4] Updating package repos & installing tools...${NC}"
 if command -v pkg >/dev/null 2>&1; then
-    pkg update -y
-    pkg install -y curl wget tar rclone fuse3 psmisc jq tsu
+    pkg update -y || true
+    pkg install -y curl wget tar rclone fuse3 psmisc jq tsu || true
 elif command -v apt-get >/dev/null 2>&1; then
-    apt-get update -y
-    apt-get install -y curl wget tar rclone fuse3 psmisc jq
+    apt-get update -y || true
+    apt-get install -y curl wget tar rclone fuse3 psmisc jq || true
 fi
 
 # 2. Detect Architecture for AList binary
@@ -56,24 +57,45 @@ esac
 
 echo -e "${GREEN}[+] Detected architecture: $ARCH -> Package: alist-$ALIST_ARCH.tar.gz${NC}"
 
-# 3. Download & Install AList
+# 3. Download & Verify AList (Fixes Bug 5)
 echo -e "\n${YELLOW}[3/4] Fetching latest AList binary from GitHub...${NC}"
 TEMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TEMP_DIR"' EXIT
+
 DOWNLOAD_URL="https://github.com/AlistGo/alist/releases/latest/download/alist-$ALIST_ARCH.tar.gz"
-
 echo "Downloading from: $DOWNLOAD_URL"
-curl -L --progress-bar -o "$TEMP_DIR/alist.tar.gz" "$DOWNLOAD_URL"
 
-tar -xzf "$TEMP_DIR/alist.tar.gz" -C "$TEMP_DIR"
-chmod +x "$TEMP_DIR/alist"
-
-if [ -w "$INSTALL_DIR" ]; then
-    mv "$TEMP_DIR/alist" "$INSTALL_DIR/alist"
-else
-    su -c "mv $TEMP_DIR/alist $INSTALL_DIR/alist && chmod 755 $INSTALL_DIR/alist"
+if ! curl -fL --progress-bar -o "$TEMP_DIR/alist.tar.gz" "$DOWNLOAD_URL"; then
+    echo -e "${RED}[X] Error: Failed to download AList archive from $DOWNLOAD_URL!${NC}"
+    exit 1
 fi
 
-rm -rf "$TEMP_DIR"
+# Verify minimum valid archive size (> 5 MB)
+ARCHIVE_SIZE=$(wc -c < "$TEMP_DIR/alist.tar.gz" 2>/dev/null || echo 0)
+if [ "$ARCHIVE_SIZE" -lt 5000000 ]; then
+    echo -e "${RED}[X] Error: Downloaded archive is corrupted or too small ($ARCHIVE_SIZE bytes). Aborting.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}[+] Archive verified ($((ARCHIVE_SIZE / 1024 / 1024)) MB). Extracting...${NC}"
+if ! tar -xzf "$TEMP_DIR/alist.tar.gz" -C "$TEMP_DIR"; then
+    echo -e "${RED}[X] Error: Extraction failed! Archive may be corrupted.${NC}"
+    exit 1
+fi
+
+if [ ! -f "$TEMP_DIR/alist" ]; then
+    echo -e "${RED}[X] Error: alist binary missing inside extracted archive!${NC}"
+    exit 1
+fi
+
+chmod 755 "$TEMP_DIR/alist"
+
+if [ -w "$INSTALL_DIR" ]; then
+    mv -f "$TEMP_DIR/alist" "$INSTALL_DIR/alist"
+else
+    su -c "mv -f $TEMP_DIR/alist $INSTALL_DIR/alist && chmod 755 $INSTALL_DIR/alist"
+fi
+
 echo -e "${GREEN}[+] AList installed successfully at: $INSTALL_DIR/alist${NC}"
 
 # 4. Initialize AList and print initial password

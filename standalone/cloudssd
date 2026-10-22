@@ -29,6 +29,7 @@ vendor = other
 user = admin
 pass = admin123
 EOF
+        chmod 600 "$RCLONE_CONF"
     fi
 }
 
@@ -91,9 +92,20 @@ mount_drive() {
 
 unmount_drive() {
     echo "[*] Unmounting $MOUNT_POINT..."
+    if ! mount | grep -q "$MOUNT_POINT"; then
+        echo "[✓] $MOUNT_POINT is already unmounted."
+        return 0
+    fi
     umount -l "$MOUNT_POINT" 2>/dev/null || true
     pkill -f "rclone mount.*TeraBox-CloudSSD" 2>/dev/null || true
-    echo "[✓] Cloud SSD unmounted."
+    sleep 1
+    if mount | grep -q "$MOUNT_POINT"; then
+        echo "[X] Error: Failed to unmount $MOUNT_POINT! Drive is busy."
+        return 1
+    else
+        echo "[✓] Cloud SSD unmounted successfully."
+        return 0
+    fi
 }
 
 stop_all() {
