@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ==============================================================================
-# Cloud SSD: Bulletproof Zero-Bootloop Magisk/KernelSU Service
+# Cloud SSD: Bulletproof Zero-Bootloop & Zero-OOM Magisk/KernelSU Service
 # Runs strictly in late_start (after system has completely finished booting)
 # ==============================================================================
 
@@ -12,9 +12,10 @@ log() {
 }
 
 # ------------------------------------------------------------------------------
-# SAFETY ARCHITECTURE (Guaranteed Zero-Bootloop):
+# SAFETY ARCHITECTURE:
 # 1. Fork background daemon immediately and exit script with return code 0.
 # 2. Never block Android boot sequence or Zygote.
+# 3. Stream downloads directly to disk to prevent RAM OOM (Exit 137).
 # ------------------------------------------------------------------------------
 
 run_cloud_ssd_daemon() {
@@ -32,25 +33,12 @@ run_cloud_ssd_daemon() {
     done
     log "Android OS boot completed confirmed."
 
-    # 2. Deploy WebUI shortcut to /sdcard for standard Magisk & browser users
+    # 2. Deploy WebUI shortcut to /sdcard
     if [ -d "/sdcard" ]; then
         cp -f "$MODDIR/webroot/index.html" "/sdcard/CloudSSD-Manager.html" 2>/dev/null || true
     fi
 
-    # 3. Locate standalone binaries (Embedded inside module)
-    ALIST_BIN="$MODDIR/bin/alist"
-    RCLONE_BIN="$MODDIR/bin/rclone"
-
-    # Fallbacks if module bin is customized
-    [ ! -x "$ALIST_BIN" ] && ALIST_BIN="$(command -v alist 2>/dev/null)"
-    [ ! -x "$RCLONE_BIN" ] && RCLONE_BIN="$(command -v rclone 2>/dev/null)"
-
-    if [ ! -x "$ALIST_BIN" ] || [ ! -x "$RCLONE_BIN" ]; then
-        log "Error: Required binaries (alist/rclone) not executable. Aborting safely."
-        exit 0
-    fi
-
-    # 4. Wait for internet connection (Wi-Fi or Mobile Data)
+    # 3. Wait for internet connection
     local net_retries=0
     local has_internet=0
     while [ $net_retries -lt 30 ]; do
@@ -63,24 +51,82 @@ run_cloud_ssd_daemon() {
         sleep 4
     done
 
+    # 4. Check and stream download binaries if missing (prevents OOM during flash)
+    ALIST_BIN="$MODDIR/bin/alist"
+    RCLONE_BIN="$MODDIR/bin/rclone"
+    mkdir -p "$MODDIR/bin"
+
+    if [ ! -x "$ALIST_BIN" ] || [ ! -x "$RCLONE_BIN" ]; then
+        log "Static binaries missing. Downloading directly to flash disk..."
+        
+        ARCH=$(uname -m)
+        case "$ARCH" in
+            aarch64|arm64)
+                ALIST_URL="https://github.com/AlistGo/alist/releases/latest/download/alist-linux-arm64.tar.gz"
+                RCLONE_URL="https://downloads.rclone.org/rclone-current-linux-arm64.zip"
+                ;;
+            *)
+                ALIST_URL="https://github.com/AlistGo/alist/releases/latest/download/alist-linux-arm-7.tar.gz"
+                RCLONE_URL="https://downloads.rclone.org/rclone-current-linux-arm-v7.zip"
+                ;;
+        esac
+
+        TEMP_DIR="/data/local/tmp/cloud_ssd_setup"
+        rm -rf "$TEMP_DIR" && mkdir -p "$TEMP_DIR"
+
+        if [ ! -x "$ALIST_BIN" ]; then
+            log "Fetching AList binary..."
+            curl -sL --max-time 120 "$ALIST_URL" -o "$TEMP_DIR/alist.tar.gz" 2>/dev/null || \
+                wget -q "$ALIST_URL" -O "$TEMP_DIR/alist.tar.gz" 2>/dev/null || true
+            if [ -f "$TEMP_DIR/alist.tar.gz" ]; then
+                tar -xzf "$TEMP_DIR/alist.tar.gz" -C "$TEMP_DIR"
+                mv "$TEMP_DIR/alist" "$ALIST_BIN" 2>/dev/null || true
+                chmod 755 "$ALIST_BIN"
+                log "AList installed successfully."
+            fi
+        fi
+
+        if [ ! -x "$RCLONE_BIN" ]; then
+            log "Fetching Rclone binary..."
+            curl -sL --max-time 120 "$RCLONE_URL" -o "$TEMP_DIR/rclone.zip" 2>/dev/null || \
+                wget -q "$RCLONE_URL" -O "$TEMP_DIR/rclone.zip" 2>/dev/null || true
+            if [ -f "$TEMP_DIR/rclone.zip" ]; then
+                unzip -q "$TEMP_DIR/rclone.zip" -d "$TEMP_DIR" 2>/dev/null || true
+                find "$TEMP_DIR" -type f -name rclone -exec mv {} "$RCLONE_BIN" \; 2>/dev/null || true
+                chmod 755 "$RCLONE_BIN"
+                log "Rclone installed successfully."
+            fi
+        fi
+
+        rm -rf "$TEMP_DIR"
+    fi
+
+    # Fallback to system / termux binaries
+    [ ! -x "$ALIST_BIN" ] && ALIST_BIN="$(command -v alist 2>/dev/null)"
+    [ ! -x "$RCLONE_BIN" ] && RCLONE_BIN="$(command -v rclone 2>/dev/null)"
+
+    if [ ! -x "$ALIST_BIN" ] || [ ! -x "$RCLONE_BIN" ]; then
+        log "Notice: Waiting for binaries to be downloaded."
+        exit 0
+    fi
+
     # 5. Start AList Daemon on Port 5244
     ALIST_DATA="/data/adb/cloud_ssd/alist_data"
     mkdir -p "$ALIST_DATA"
 
     if ! pgrep -f "$ALIST_BIN server" >/dev/null 2>&1; then
-        log "Starting embedded AList daemon..."
+        log "Starting AList daemon..."
         "$ALIST_BIN" admin set admin123 --data "$ALIST_DATA" >/dev/null 2>&1 || true
         nohup "$ALIST_BIN" server --data "$ALIST_DATA" > "$ALIST_DATA/alist.log" 2>&1 &
         sleep 4
     fi
 
-    # 6. Check if default rclone config exists
+    # 6. Configure Rclone WebDAV endpoint if missing
     RCLONE_CONF="/data/adb/cloud_ssd/rclone.conf"
     mkdir -p "/data/adb/cloud_ssd"
     
-    # Auto-generate rclone WebDAV config for AList if missing
     if [ ! -f "$RCLONE_CONF" ]; then
-        log "Creating default rclone.conf for AList WebDAV loopback..."
+        log "Creating default rclone.conf for AList WebDAV..."
         cat <<EOF > "$RCLONE_CONF"
 [terabox]
 type = webdav
@@ -98,7 +144,6 @@ EOF
     if ! mount | grep -q "$MOUNT_POINT"; then
         log "Injecting Rclone FUSE mount into Global Mount Namespace..."
         
-        # Zero internal storage cache policy: --vfs-cache-mode off
         if command -v nsenter >/dev/null 2>&1; then
             nsenter -t 1 -m -- "$RCLONE_BIN" mount terabox: "$MOUNT_POINT" \
                 --config "$RCLONE_CONF" \

@@ -12,10 +12,10 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ZIP_PATH="$ROOT_DIR/CloudSSD-TeraBox-v1.0.0.zip"
+TAG="${1:-v1.0.1}"
+ZIP_PATH="${2:-$ROOT_DIR/CloudSSD-TeraBox-v1.0.1-Lite.zip}"
 GH_USER="PandeyJI-9"
 GH_REPO="Cloud-ssd-on-Android"
-TAG="v1.0.0"
 
 # Fetch token
 GH_TOKEN="${GITHUB_TOKEN:-}"
