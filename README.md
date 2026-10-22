@@ -197,9 +197,8 @@ Cloud-ssd-on-Android/
 │   ├── module.prop                     # Magisk/KernelSU Module metadata
 │   ├── service.sh                      # Universal boot service (Survives reboot)
 │   └── customize.sh                    # Installation hook
-└── .github/
-    └── workflows/
-        └── ci_and_build.yml            # GitHub Actions (Builds Magisk zip on cloud runners)
+└── workflows/
+    └── ci_and_build.yml            # GitHub Actions (Builds Magisk zip on cloud runners)
 ```
 
 ---
