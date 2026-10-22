@@ -143,14 +143,18 @@
         async function execCommand(action) {
             const logBox = document.getElementById('log-box');
             if (action === 'mount') {
-                logBox.innerText += "\n[Action] Executing mount command...";
+                logBox.innerText += "\n[Action] Mounting Cloud SSD...";
                 if (window.ksu) {
-                    await runShell("sh /data/adb/modules/cloud_ssd_terabox/scripts/mount.sh");
+                    await runShell("sh /data/adb/cloud_ssd/mount.sh");
+                } else {
+                    logBox.innerText += "\nTo mount via terminal, run: su -c sh /data/adb/cloud_ssd/mount.sh";
                 }
             } else if (action === 'unmount') {
-                logBox.innerText += "\n[Action] Executing unmount command...";
+                logBox.innerText += "\n[Action] Unmounting Cloud SSD...";
                 if (window.ksu) {
-                    await runShell("sh /data/adb/modules/cloud_ssd_terabox/scripts/unmount.sh");
+                    await runShell("sh /data/adb/cloud_ssd/unmount.sh");
+                } else {
+                    logBox.innerText += "\nTo unmount via terminal, run: su -c sh /data/adb/cloud_ssd/unmount.sh";
                 }
             }
             setTimeout(checkStatus, 2000);

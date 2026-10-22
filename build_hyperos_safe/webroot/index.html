@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Cloud SSD Manager</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --border-color: #30363d;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --success: #2ea043;
+            --danger: #da3633;
+            --warning: #d29922;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background: var(--bg-color); color: var(--text-main); padding: 16px; padding-bottom: 40px; }
+        header { text-align: center; margin-bottom: 20px; }
+        h1 { font-size: 1.4rem; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        p.subtitle { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+        
+        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .card-title { font-size: 0.95rem; font-weight: 600; color: #fff; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        .status-online { background: rgba(46, 160, 67, 0.15); color: var(--success); border: 1px solid var(--success); }
+        .status-offline { background: rgba(218, 54, 51, 0.15); color: var(--danger); border: 1px solid var(--danger); }
+        
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+        .btn { border: none; outline: none; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; color: #fff; text-align: center; }
+        .btn-primary { background: var(--accent); color: #000; }
+        .btn-success { background: var(--success); }
+        .btn-danger { background: var(--danger); }
+        .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+        .btn:active { transform: scale(0.98); opacity: 0.9; }
+
+        .info-row { display: flex; justify-content: space-between; font-size: 0.85rem; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: var(--text-muted); }
+        .info-val { font-family: monospace; color: var(--accent); font-weight: 500; }
+
+        .log-box { background: #000; color: #39d353; font-family: monospace; font-size: 0.72rem; padding: 10px; border-radius: 8px; height: 130px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+        
+        .guide-step { display: flex; gap: 10px; margin-bottom: 10px; font-size: 0.82rem; }
+        .step-num { background: var(--border-color); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>☁️ Cloud SSD Manager</h1>
+        <p class="subtitle">TeraBox 1TB Virtual Drive for Android</p>
+    </header>
+
+    <!-- Status Overview -->
+    <div class="card">
+        <div class="card-title">
+            <span>Live System Status</span>
+            <span id="service-badge" class="status-badge status-offline">● Checking...</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Mount Point:</span>
+            <span class="info-val">/sdcard/TeraBox-CloudSSD</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">WebDAV Server:</span>
+            <span class="info-val">http://127.0.0.1:5244/dav</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Cache Policy:</span>
+            <span class="info-val">Zero Disk Cache (RAM Only)</span>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card">
+        <div class="card-title">Storage Controls</div>
+        <div class="btn-grid">
+            <button class="btn btn-success" onclick="execCommand('mount')">⚡ Mount Drive</button>
+            <button class="btn btn-danger" onclick="execCommand('unmount')">🛑 Unmount</button>
+        </div>
+        <div style="margin-top: 10px;">
+            <a href="http://127.0.0.1:5244" target="_blank" class="btn btn-primary" style="width: 100%;">
+                🌐 Open AList Web Dashboard (5244)
+            </a>
+        </div>
+    </div>
+
+    <!-- Quick Setup Guide -->
+    <div class="card">
+        <div class="card-title">30-Second Setup Guide</div>
+        <div class="guide-step">
+            <div class="step-num">1</div>
+            <div>Open <b>AList Web Dashboard</b> (above button) and login with <code>admin</code> / <code>admin123</code>.</div>
+        </div>
+        <div class="guide-step">
+            <div class="step-num">2</div>
+            <div>Go to <b>Manage -> Storages -> Add -> TeraBox</b>. Paste your TeraBox cookie (<code>ndus=...</code>) and Save.</div>
+        </div>
+        <div class="guide-step">
+            <div class="step-num">3</div>
+            <div>Tap <b>Mount Drive</b> above. Your 1TB drive is live in <b>ZArchiver / File Manager</b>!</div>
+        </div>
+    </div>
+
+    <!-- Live Execution Logs -->
+    <div class="card">
+        <div class="card-title">
+            <span>Daemon Logs</span>
+            <button class="btn btn-outline" style="padding: 4px 8px; font-size: 0.7rem;" onclick="refreshLogs()">Refresh</button>
+        </div>
+        <div class="log-box" id="log-box">[System ready] Tap Refresh to load logs...</div>
+    </div>
+
+    <script>
+        // Check KernelSU or MMRL JS API
+        let ksu = window.ksu || null;
+
+        async function runShell(cmd) {
+            if (window.ksu && window.ksu.exec) {
+                return window.ksu.exec(cmd);
+            }
+            console.log("Running command (Standard Web Mode):", cmd);
+            return null;
+        }
+
+        async function checkStatus() {
+            const badge = document.getElementById('service-badge');
+            try {
+                // Check if AList is running by pinging the dashboard
+                const res = await fetch('http://127.0.0.1:5244', { mode: 'no-cors' });
+                badge.className = 'status-badge status-online';
+                badge.innerText = '● Active & Mounted';
+            } catch(e) {
+                badge.className = 'status-badge status-offline';
+                badge.innerText = '● Daemon Stopped';
+            }
+        }
+
+        async function execCommand(action) {
+            const logBox = document.getElementById('log-box');
+            if (action === 'mount') {
+                logBox.innerText += "\n[Action] Mounting Cloud SSD...";
+                if (window.ksu) {
+                    await runShell("sh /data/adb/cloud_ssd/mount.sh");
+                } else {
+                    logBox.innerText += "\nTo mount via terminal, run: su -c sh /data/adb/cloud_ssd/mount.sh";
+                }
+            } else if (action === 'unmount') {
+                logBox.innerText += "\n[Action] Unmounting Cloud SSD...";
+                if (window.ksu) {
+                    await runShell("sh /data/adb/cloud_ssd/unmount.sh");
+                } else {
+                    logBox.innerText += "\nTo unmount via terminal, run: su -c sh /data/adb/cloud_ssd/unmount.sh";
+                }
+            }
+            setTimeout(checkStatus, 2000);
+        }
+
+        async function refreshLogs() {
+            const logBox = document.getElementById('log-box');
+            logBox.innerText = "[Status] Checking connection to AList on port 5244...";
+            checkStatus();
+        }
+
+        setInterval(checkStatus, 5000);
+        checkStatus();
+    </script>
+</body>
+</html>
