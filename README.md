@@ -195,7 +195,6 @@ Agar tum chahte ho ki **phone switch off ya restart hone ke baad bhi Cloud SSD a
 Cloud-ssd-on-Android/
 ├── README.md                           # Main Documentation & Step-by-Step Guide
 ├── docs/
-│   ├── BRUTAL_TRUTH_VS_YT_MYTHS.md     # Technical breakdown of Latency vs Speed
 │   └── REVERSE_ENGINEERING_TERABOX.md  # TeraBox API internals & REA architecture
 ├── scripts/
 │   ├── install_dependencies_termux.sh  # Automated AList + Rclone installer for Termux
