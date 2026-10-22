@@ -1,5 +1,11 @@
 # ☁️ Cloud SSD: TeraBox 1TB Mount on Android (Root & Termux)
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Linux-brightgreen.svg)](#)
+[![Root](https://img.shields.io/badge/Root-Magisk%20%7C%20KernelSU%20%7C%20APatch-orange.svg)](#)
+[![Termux](https://img.shields.io/badge/Environment-Termux%20(F--Droid)-black.svg)](#)
+[![CI Build](https://img.shields.io/badge/GitHub%20Actions-Automated%20Build-blue.svg)](#)
+
 > **No Sugar-Coating, 10000% Raw Technical Reality & Working Implementation**  
 > Is repo me TeraBox 1TB free cloud storage ko Android me **Virtual Cloud SSD** ki tarah mount karne ka complete, tested framework aur architecture diya gaya hai.
 
@@ -11,12 +17,12 @@
 3. [🏗️ Cloud SSD Architecture on Android](#️-cloud-ssd-architecture-on-android)
 4. [🔍 Reverse Engineering TeraBox & REA Tool](#-reverse-engineering-terabox--rea-tool)
 5. [🚀 Complete Step-by-Step Installation Guide](#-complete-step-by-step-installation-guide)
-   - [Phase 1: Termux & Toolchain Setup](#phase-1-termux--toolchain-setup)
-   - [Phase 2: AList WebDAV Bridge for TeraBox](#phase-2-alist-webdav-bridge-for-terabox)
-   - [Phase 3: Rclone FUSE Mount](#phase-3-rclone-fuse-mount)
-   - [Phase 4: Root & Boot Persistence (Magisk/KernelSU)](#phase-4-root--boot-persistence-magiskkernelsu)
+   - [Method 1: Termux Setup (Quick & Direct)](#method-1-termux-setup-quick--direct)
+   - [Method 2: Magisk/KernelSU Module (Permanent Reboot Setup)](#method-2-magiskkernelsu-module-permanent-reboot-setup)
+   - [How to get TeraBox Cookie on Mobile](#how-to-get-terabox-cookie-on-mobile-without-pc)
 6. [🛠️ Scripts & Project Structure](#️-scripts--project-structure)
 7. [🤖 GitHub Actions Support (Zero Phone Heating)](#-github-actions-support-zero-phone-heating)
+8. [🚀 How to Push this Project to Your GitHub](#-how-to-push-this-project-to-your-github)
 
 ---
 
@@ -89,20 +95,20 @@ TeraBox ka koi direct official WebDAV ya Linux mount support nahi hai. Humne isk
 |                 +--------------------------+------------------------+         |
 |                                            |                                  |
 |                                    Access via Mount Point                     |
-|                           /mnt/runtime/default/emulated/0/TeraBox             |
+|                           /sdcard/TeraBox-CloudSSD                            |
 +--------------------------------------------|----------------------------------+
                                              |
 +--------------------------------------------v----------------------------------+
 |                          FUSE LAYER (Rclone Daemon)                           |
 |  * Mount Engine: rclone mount --allow-other --dir-cache-time 24h              |
-|  * Cache Control: Minimal / Zero Cache configuration                          |
+|  * Cache Policy: Zero Local Disk Cache (--vfs-cache-mode off)                 |
 |  * Namespace: Injected into Android Global PID 1 Init Namespace (`nsenter`)   |
 +--------------------------------------------|----------------------------------+
                                              | (Localhost HTTP/WebDAV Loopback)
 +--------------------------------------------v----------------------------------+
 |                      MIDDLEWARE LAYER (AList Daemon)                          |
 |  * Runs locally on port 5244 (http://127.0.0.1:5244/dav)                      |
-|  * Handles TeraBox Cookie Session, Token Refresh & Anti-Bot Protection       |
+|  * Handles TeraBox Cookie Session, Token Refresh & Anti-Bot Protection        |
 +--------------------------------------------|----------------------------------+
                                              | (Encrypted HTTPS REST API)
 +--------------------------------------------v----------------------------------+
@@ -115,105 +121,104 @@ TeraBox ka koi direct official WebDAV ya Linux mount support nahi hai. Humne isk
 
 ## 🔍 Reverse Engineering TeraBox & REA Tool
 
-Tumne mention kiya ki agar jarurat pade to **REA (Reverse Engineer Anything)** use karo jo GitHub par viral hai (`github.com/morluto/rea`).
-
-### TeraBox API Reality:
-TeraBox Baidu ka international cloud storage platform hai. Unka official API third-party developers ke liye public nahi hai.
-Community ne TeraBox web application ko reverse-engineer karke ye key parameters dhundhe hain jinhe AList use karta hai:
-1. **Session Cookie (`ndus`):** TeraBox user login state ko `ndus=...` cookie me store karta hai.
-2. **Tokens (`bdstoken` & `jsToken`):** Har API request ke sath CSRF validation ke liye verify hota hai.
-3. **Download URL Generation:** Web API `/api/download` request leti hai `fs_id` ke sath aur ek direct CDN mirror URL return karti hai.
-4. **Anti-Bot Throttling:** Agar multiple parallel threads bina browser user-agent ke chalte hain, to TeraBox HTTP 403 ya Captcha challenge throw karta hai. AList is user-agent rotation aur token parsing ko internally handle karta hai.
+Humne **REA (Reverse Engineer Anything)** (`morluto/rea`) framework aur API analysis use kiya hai:
+1. **Session Cookie (`ndus`):** TeraBox user login state ko `ndus=...` cookie me verify karta hai.
+2. **Tokens (`bdstoken` & `jsToken`):** CSRF verification tokens.
+3. **Download URL Generation:** Web API `/api/download` request leti hai `fs_id` ke sath aur direct CDN mirror URL return karti hai.
+4. **Anti-Bot Throttling:** Multi-thread parallel download ke dauran TeraBox user-agent verification mangta hai. AList is sabko internally bridge karta hai.
 
 ---
 
 ## 🚀 Complete Step-by-Step Installation Guide
 
 ### Prerequisite Checklist:
-- [x] Android device (Rooted with Magisk, KernelSU, ya APatch).
-- [x] Termux installed (from F-Droid or GitHub, Play Store wala nahi).
-- [x] Active TeraBox account (1TB free).
-- [x] Phone browser (Chrome/Kiwi/Firefox) cookie nikalne ke liye.
+- [x] Android device (Rooted with Magisk, KernelSU, ya APatch for permanent mount; non-root user for Termux only).
+- [x] Termux app (F-Droid version, Google Play Store version nahi).
+- [x] TeraBox Account (1TB Free).
 
 ---
 
-### Phase 1: Termux & Toolchain Setup
+### Method 1: Termux Setup (Quick & Direct)
 
-Termux open karo aur required packages install karo:
-
+#### Step 1: Termux Packages & AList Install
+Termux open karo aur ye commands run karo:
 ```bash
-# Termux update & core packages
-pkg update -y && pkg upgrade -y
-pkg install -y tsu curl wget git rclone fuse3 psmisc jq
+# Repo clone karo
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git cloud-ssd
+cd cloud-ssd
+
+# Dependencies aur AList ARM64 binary auto-install karo
+bash scripts/install_dependencies_termux.sh
 ```
 
----
-
-### Phase 2: AList WebDAV Bridge Setup
-
-AList lightweight Go binary hai jo background me TeraBox ko WebDAV me convert karta hai.
-
-1. **AList binary download aur setup:**
+#### Step 2: AList Background Service Start Karo
 ```bash
-# Workspace script use karo jo humne provide kiya hai:
-bash /workspace/cloud-ssd/scripts/install_dependencies_termux.sh
+bash scripts/start_alist.sh
 ```
+Ab Termux me show hoga:
+- **Dashboard URL:** `http://127.0.0.1:5244`
+- **Username:** `admin`
+- **Default Password:** `admin123` *(agar change karna ho: `alist admin set YOUR_PASSWORD`)*
 
-2. **Apna TeraBox Cookie nikalo:**
-   - Apne mobile ya PC browser me `terabox.com` open karo aur login karo.
-   - Browser Inspect (F12) -> **Network** tab -> kisi bhi `terabox.com` request par click karo.
-   - **Request Headers** me se `Cookie` copy karo (khaaskar `ndus=Yxxxxxx` wali value).
+#### Step 3: AList me TeraBox Mount Karo
+1. Phone ke Chrome/Firefox browser me jao aur open karo: `http://localhost:5244`
+2. Login karo (`admin` / `admin123`).
+3. Sidebar me **Manage** par click karo -> **Storages** -> **Add**.
+4. **Driver**: `TeraBox` select karo.
+5. **Mount Path**: `/terabox`
+6. **Cookie**: Apni TeraBox ki cookie paste karo (Neeche cookie guide dekho).
+7. **Download API**: `Crack` select karo.
+8. **Save** par click karo. Status **work** aana chahiye!
 
-3. **AList me TeraBox add karo:**
-   - AList web UI open karo: `http://localhost:5244`
-   - Default login check karo Termux me run karke: `alist admin`
-   - Dashboard me jao: **Manage -> Storages -> Add -> Select "TeraBox"**
-   - **Mount Path**: `/terabox`
-   - **Cookie**: Jo cookie copy ki thi wo paste karo.
-   - **Download API**: `Crack` ya `Official` select karo.
-   - **Save** par click karo. Status **work** aana chahiye!
-
----
-
-### Phase 3: Rclone FUSE Mount (Zero Internal Storage Impact)
-
-Rclone ko configure karo WebDAV remote ke liye:
-
-1. Rclone config run karo:
+#### Step 4: Rclone WebDAV Remote Configure Karo
+Termux me run karo:
 ```bash
 rclone config
 ```
-- New remote: `n`
+Ye options choose karo:
+- `n` (New remote)
 - Name: `terabox`
 - Storage type: `webdav`
 - URL: `http://127.0.0.1:5244/dav`
 - Vendor: `other`
-- User: `<tera-alist-username>`
-- Pass: `<tera-alist-password>`
+- User: `admin`
+- Password: `y` (enter your AList password)
+- Baaki sab settings ke liye `Enter` press karte jao.
 
-2. **Mount Script execute karo:**
+#### Step 5: Mount Execute Karo (Zero Internal Storage Impact!)
 ```bash
-bash /workspace/cloud-ssd/scripts/mount_terabox.sh
+bash scripts/mount_terabox.sh
 ```
+Ab apne phone ka **ZArchiver**, **Solid Explorer**, ya **MiXplorer** open karo:
+Tumhe `/sdcard/TeraBox-CloudSSD` me tumhari 1TB cloud storage dikhayi degi!
 
-> **Why our mount flags are optimized for zero local disk usage:**
-> - `--vfs-cache-mode off` ya `--vfs-cache-mode minimal`: Phone ki internal storage me GBs ka buffer create nahi hoga.
-> - `--buffer-size 16M`: RAM ka sirf 16MB buffer use hoga streaming ke time.
-> - `--dir-cache-time 24h`: Cloud folder listing baar-baar load nahi karni padegi.
-> - `--allow-other`: Doosre apps ko read/write access milega.
+Unmount karne ke liye:
+```bash
+bash scripts/unmount_terabox.sh
+```
 
 ---
 
-### Phase 4: Root & Boot Persistence (Magisk/KernelSU)
+### Method 2: Magisk/KernelSU Module (Permanent Reboot Setup)
 
-Agar phone restart ho gaya to normal scripts band ho jati hain. Permanent mount ke liye humne **Magisk Module template & `service.d` auto-mount boot script** banaya hai.
+Agar tum chahte ho ki **phone restart hone ke baad bhi Cloud SSD automatically mount rahe** aur har app me visible rahe:
 
-1. Directory: `/workspace/cloud-ssd/magisk_module/`
-2. Boot script automatically check karta hai:
-   - Wi-Fi/Mobile network up hone ka wait karega (`ping -c 1 8.8.8.8`).
-   - AList daemon ko start karega background me.
-   - Global Mount Namespace (`nsenter -t 1 -m`) use karke `/sdcard/CloudSSD` par mount karega.
-   - Reboot ke baad bhi storage **ZArchiver**, **Solid Explorer**, **MiXplorer**, aur **Emulators** me hamesha visible rahegi!
+1. Humne ready-to-use Magisk module structure banaya hai: `magisk_module/`.
+2. Module automatically:
+   - Wi-Fi/Internet connect hone ka wait karega.
+   - Background me AList start karega.
+   - Android ke **Global Mount Namespace (`nsenter -t 1 -m`)** me mount karega taaki sabhi applications ko drive permanently dikhe!
+3. Flashable ZIP GitHub Actions me automatic build ho jata hai (Neeche dekho).
+
+---
+
+### How to get TeraBox Cookie on Mobile (Without PC)
+
+1. Apne phone me **Kiwi Browser** ya **Firefox Nightly** install karo (jo extensions support karta hai).
+2. Chrome Web Store se **"Cookie-Editor"** extension install karo.
+3. `terabox.com` par jao aur login karo.
+4. Cookie-Editor extension par tap karo aur **Export as Header String** ya `ndus` cookie copy kar lo.
+5. AList ke Dashboard me paste kar do.
 
 ---
 
@@ -227,8 +232,10 @@ Agar phone restart ho gaya to normal scripts band ho jati hain. Permanent mount 
 │   └── REVERSE_ENGINEERING_TERABOX.md  # TeraBox API, Token mechanics & REA details
 ├── scripts/
 │   ├── install_dependencies_termux.sh  # Automated setup for Termux (AList + Rclone)
+│   ├── start_alist.sh                  # AList background service runner
 │   ├── mount_terabox.sh               # Optimized Rclone FUSE mounting script
-│   └── unmount_terabox.sh             # Clean unmount & process killer
+│   ├── unmount_terabox.sh             # Clean unmount & process killer
+│   └── push_to_github.sh              # 1-Click push automation script for GitHub
 ├── magisk_module/
 │   ├── module.prop                     # Magisk/KernelSU Module metadata
 │   ├── service.sh                      # Universal boot service script (Global NS)
@@ -242,9 +249,24 @@ Agar phone restart ho gaya to normal scripts band ho jati hain. Permanent mount 
 
 ## 🤖 GitHub Actions Support (Zero Phone Heating)
 
-User request ke hisaab se: Phone par koi heavy binary compile ya long build run nahi hoga.
-`.github/workflows/ci_and_build.yml` file add kar di gayi hai:
-- Custom Rclone forks compile karna (`gulp79/rclone-extra` ya `bclone`)
-- Static ARM64 binaries bundle karna
-- Magisk module zip automatically release me create karna
-Jab tum apna GitHub repository link karoge, ye sab kuch Cloud (GitHub Actions Runners) me compile hoga, phone bilkul cool rahega!
+Humne `.github/workflows/ci_and_build.yml` configure kar diya hai:
+* Ye phone par koi heavy compilation nahi karega.
+* GitHub ke cloud runners par ARM64 binaries automatically download karke **Flashable Magisk ZIP (`CloudSSD-TeraBox-ARM64-v1.0.0.zip`)** build kar dega.
+* Releases section me direct download link mil jayega!
+
+---
+
+## 🚀 How to Push this Project to Your GitHub
+
+### Option 1: Direct 1-Line Script (Easiest)
+Workspace me helper script run karo:
+```bash
+bash scripts/push_to_github.sh <YOUR_GITHUB_USERNAME> <YOUR_REPO_NAME> <YOUR_TOKEN>
+```
+
+### Option 2: Manual Git Commands
+```bash
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git branch -M main
+git push -u origin main
+```
