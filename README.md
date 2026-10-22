@@ -108,14 +108,24 @@ TeraBox official WebDAV provide nahi karta, isliye humne robust 3-Tier architect
 
 ### Method 1: Termux Setup (Quick & Direct)
 
-#### Step 1: Repo Clone & Dependency Installation
-Termux open karo aur run karo:
+#### Step 1: Termux Packages & Repo Setup
+Naye Termux me `git` pehle se nahi hota, isliye pehle package update aur `git` install karo:
+
 ```bash
-# Repo clone karo
+# ⚡ 1-Click All-in-One Command (Pura ek sath copy-paste karo):
+pkg update -y && pkg install -y git && git clone https://github.com/PandeyJI-9/Cloud-ssd-on-Android.git cloud-ssd && cd cloud-ssd && bash scripts/install_dependencies_termux.sh
+```
+
+**Ya step-by-step run karo:**
+```bash
+# 1. Git install karo
+pkg update -y && pkg install -y git
+
+# 2. Repo clone karo aur folder me jao
 git clone https://github.com/PandeyJI-9/Cloud-ssd-on-Android.git cloud-ssd
 cd cloud-ssd
 
-# Dependencies (Rclone, FUSE3, AList ARM64 binary) install karo
+# 3. Dependencies (Rclone, FUSE3, AList ARM64 binary) install karo
 bash scripts/install_dependencies_termux.sh
 ```
 
