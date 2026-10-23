@@ -66,9 +66,22 @@ fi
 # 3. Deep search all text/data in sandbox
 if [ -z "$COOKIE" ]; then
     MATCH=$(grep -rhoE "ndus=[a-zA-Z0-9_\-]+" /data/data/$PKG/ 2>/dev/null | head -n 1)
-    if [ -n "$COOKIE" ]; then
+    if [ -n "$MATCH" ]; then
         COOKIE="$MATCH"
     fi
+fi
+
+# 4. Search installed browsers (Kiwi, Chrome)
+if [ -z "$COOKIE" ]; then
+    for browser in com.kiwibrowser.browser com.android.chrome mark.via.gp; do
+        if [ -d "/data/data/$browser" ]; then
+            MATCH=$(grep -sraoE "ndus=[a-zA-Z0-9_\-]{15,}" "/data/data/$browser" 2>/dev/null | head -n 1 | cut -d: -f2-)
+            if [ -n "$MATCH" ]; then
+                COOKIE="$MATCH"
+                break
+            fi
+        fi
+    done
 fi
 
 if [ -n "$COOKIE" ]; then
@@ -84,6 +97,13 @@ if [ -n "$COOKIE" ]; then
     echo "$COOKIE" > /sdcard/terabox_cookie.txt
     echo "(Also saved to /sdcard/terabox_cookie.txt for easy copy!)"
 else
-    echo "[!] Could not automatically parse 'ndus'. Look through SharedPreferences:"
-    grep -rn -E "token|session|bdstoken|cookie" /data/data/$PKG/shared_prefs/ 2>/dev/null | head -n 10
+    echo "[!] 'ndus' cookie not found in mobile app data."
+    echo "    (The native TeraBox app uses OAuth tokens, not browser session cookies)."
+    echo ""
+    echo "💡 HOW TO GET 'ndus' IN 2 MINUTES ON PHONE:"
+    echo "1. Install 'Kiwi Browser' from Play Store."
+    echo "2. Add 'Cookie-Editor' extension from Chrome Web Store."
+    echo "3. Open https://www.terabox.com (or https://www.1024tera.com)."
+    echo "4. Tap 3 dots -> Check 'Desktop site' -> Sign in with Google."
+    echo "5. Tap 3 dots -> Cookie-Editor -> Copy 'ndus' value!"
 fi
