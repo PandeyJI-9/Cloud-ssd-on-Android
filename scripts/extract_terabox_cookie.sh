@@ -71,14 +71,17 @@ if [ -z "$COOKIE" ]; then
     fi
 fi
 
-# 4. Search installed browsers (Kiwi, Chrome)
+# 4. Search installed browsers (Chrome, Kiwi, Via)
 if [ -z "$COOKIE" ]; then
-    for browser in com.kiwibrowser.browser com.android.chrome mark.via.gp; do
+    for browser in com.android.chrome com.kiwibrowser.browser mark.via.gp com.chrome.beta; do
         if [ -d "/data/data/$browser" ]; then
-            MATCH=$(grep -sraoE "ndus=[a-zA-Z0-9_\-]{15,}" "/data/data/$browser" 2>/dev/null | head -n 1 | cut -d: -f2-)
+            MATCH=$(grep -srah -o -E "ndus[a-zA-Z0-9_\-]{20,}" "/data/data/$browser" 2>/dev/null | head -n 1)
             if [ -n "$MATCH" ]; then
-                COOKIE="$MATCH"
-                break
+                VAL=$(echo "$MATCH" | sed 's/^ndus//')
+                if [ -n "$VAL" ] && [ ${#VAL} -gt 15 ]; then
+                    COOKIE="ndus=$VAL"
+                    break
+                fi
             fi
         fi
     done
