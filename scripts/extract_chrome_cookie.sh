@@ -29,6 +29,10 @@ if [ -z "$FOUND_PKG" ]; then
 fi
 
 echo "[+] Found Chrome Package: $FOUND_PKG"
+echo "[*] Closing Chrome cleanly to flush cookies to disk..."
+am force-stop "$FOUND_PKG" 2>/dev/null
+sleep 1
+
 echo "[*] Searching Chrome storage for TeraBox 'ndus' cookie..."
 
 COOKIE_VAL=""
@@ -56,15 +60,15 @@ if command -v sqlite3 >/dev/null 2>&1; then
     done
 fi
 
-# 2. Pattern scan on Cookies, WAL, and profile files
+# 2. Targeted pattern scan on Cookies, WAL, and profile files
 if [ -z "$COOKIE_VAL" ]; then
     for db in $DB_FILES; do
         db_dir=$(dirname "$db")
-        # In SQLite, records store 'ndus' followed directly by the cookie value
-        RAW=$(grep -srah -o -E "ndus[a-zA-Z0-9_\-]{20,}" "$db_dir" 2>/dev/null | head -n 1)
+        # In SQLite, records store 'terabox.comndus' followed directly by the cookie value
+        RAW=$(grep -srah -o -E "([a-zA-Z0-9_\-\.]*)(terabox|1024tera|dubox)\.comndus[a-zA-Z0-9_\-]+" "$db_dir" 2>/dev/null | head -n 1)
         if [ -n "$RAW" ]; then
-            # Strip the 'ndus' prefix
-            COOKIE_VAL=$(echo "$RAW" | sed 's/^ndus//')
+            # Strip everything up to ndus
+            COOKIE_VAL=$(echo "$RAW" | sed -E 's/.*ndus//')
             if [ -n "$COOKIE_VAL" ] && [ ${#COOKIE_VAL} -gt 15 ]; then
                 break
             fi
@@ -72,11 +76,11 @@ if [ -z "$COOKIE_VAL" ]; then
     done
 fi
 
-# 3. Fallback: Full scan of Chrome app directory for ndus pattern
+# 3. Fallback: Search all Cookies* files across Chrome
 if [ -z "$COOKIE_VAL" ]; then
-    RAW=$(grep -srah -o -E "ndus[a-zA-Z0-9_\-]{20,}" "/data/data/$FOUND_PKG/app_chrome" 2>/dev/null | head -n 1)
+    RAW=$(find "/data/data/$FOUND_PKG/app_chrome" -name "Cookies*" -exec grep -aoE "([a-zA-Z0-9_\-\.]*)(terabox|1024tera|dubox)\.comndus[a-zA-Z0-9_\-]+" {} + 2>/dev/null | head -n 1)
     if [ -n "$RAW" ]; then
-        COOKIE_VAL=$(echo "$RAW" | sed 's/^ndus//')
+        COOKIE_VAL=$(echo "$RAW" | sed -E 's/.*ndus//')
     fi
 fi
 
@@ -114,12 +118,11 @@ if [ -n "$COOKIE_VAL" ]; then
     exit 0
 else
     echo ""
-    echo "[!] Could not find 'ndus' cookie in Chrome data."
+    echo "[!] Could not automatically parse 'ndus' cookie."
     echo ""
-    echo "Dhyan dein:"
-    echo "1. Kya Chrome me https://www.terabox.com ya https://www.1024tera.com logged in hai?"
-    echo "   (Make sure incognito mode me nahi, normal Chrome tab me logged in ho)."
-    echo "2. Chrome ko ek baar recent apps se swipe close karein taaki cookies disk par save ho jayein."
-    echo "3. Phir ye command dobara chalayein!"
+    echo "[*] Diagnostic Check (What is inside Chrome Cookies for TeraBox?):"
+    find "/data/data/$FOUND_PKG/app_chrome" -name "Cookies*" -exec strings {} + 2>/dev/null | grep -i -E "terabox|1024tera|dubox" | head -n 10
+    echo ""
+    echo "Tip: Make sure you are logged into https://www.terabox.com in Google Chrome (not incognito)!"
     exit 1
 fi
