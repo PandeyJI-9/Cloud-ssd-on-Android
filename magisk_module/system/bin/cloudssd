@@ -1,0 +1,505 @@
+#!/system/bin/sh
+# ==============================================================================
+# Cloud SSD: Master Android Controller (Zero-Bootloop, AI Smart On-Demand Engine)
+# Supports: Google Drive, TeraBox, OneDrive, WebDAV, or any Rclone Remote
+# ==============================================================================
+
+INSTALL_DIR="/data/cloudssd"
+ALIST_BIN="$INSTALL_DIR/bin/alist"
+RCLONE_BIN="$INSTALL_DIR/bin/rclone"
+DATA_DIR="$INSTALL_DIR/data"
+RCLONE_CONF="$INSTALL_DIR/rclone.conf"
+CACHE_DIR="/data/local/tmp/cloudssd_cache"
+LOG_FILE="/data/local/tmp/cloudssd.log"
+
+mkdir -p "$INSTALL_DIR/bin" "$DATA_DIR" "$CACHE_DIR" 2>/dev/null || true
+
+log() {
+    echo "[$(date '+%H:%M:%S')] $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+SELF_BIN="$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
+if [ ! -f "$SELF_BIN" ]; then
+    SELF_BIN="$(command -v "$0" 2>/dev/null || echo "/data/cloudssd/cloudssd")"
+fi
+
+# ------------------------------------------------------------------------------
+# 1. ENSURE ROOT & PID 1 GLOBAL MOUNT NAMESPACE INJECTION
+# ------------------------------------------------------------------------------
+ensure_root_namespace() {
+    if [ "$(id -u)" -ne 0 ]; then
+        if command -v su >/dev/null 2>&1; then
+            exec su -c "$SELF_BIN" "$@"
+        else
+            echo "[X] Root access is required for Cloud SSD."
+            exit 1
+        fi
+    fi
+
+    # Switch into PID 1 Global Mount Namespace if in isolated subshell
+    if [ -f "/proc/1/ns/mnt" ] && [ -f "/proc/self/ns/mnt" ]; then
+        INIT_NS=$(readlink /proc/1/ns/mnt 2>/dev/null || echo "1")
+        SELF_NS=$(readlink /proc/self/ns/mnt 2>/dev/null || echo "2")
+        if [ "$INIT_NS" != "$SELF_NS" ]; then
+            if command -v nsenter >/dev/null 2>&1; then
+                exec nsenter -t 1 -m -- "$SELF_BIN" "$@"
+            fi
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# 2. LOCATE BINARIES & CONFIG
+# ------------------------------------------------------------------------------
+locate_bins() {
+    if [ ! -x "$RCLONE_BIN" ]; then
+        for p in /data/data/com.termux/files/usr/bin/rclone \
+                 /data/adb/modules/cloud_ssd_terabox/bin/rclone \
+                 /system/bin/rclone \
+                 /data/local/tmp/rclone \
+                 $(command -v rclone 2>/dev/null); do
+            if [ -x "$p" ]; then
+                RCLONE_BIN="$p"
+                break
+            fi
+        done
+    fi
+
+    if [ ! -x "$ALIST_BIN" ]; then
+        for a in /data/data/com.termux/files/usr/bin/alist \
+                 /data/adb/modules/cloud_ssd_terabox/bin/alist \
+                 /system/bin/alist \
+                 $(command -v alist 2>/dev/null); do
+            if [ -x "$a" ]; then
+                ALIST_BIN="$a"
+                break
+            fi
+        done
+    fi
+
+    if [ ! -f "$RCLONE_CONF" ]; then
+        for c in /data/data/com.termux/files/home/.config/rclone/rclone.conf \
+                 /sdcard/.rclone/rclone.conf \
+                 /data/adb/cloud_ssd/rclone.conf \
+                 "$HOME/.config/rclone/rclone.conf"; do
+            if [ -f "$c" ]; then
+                RCLONE_CONF="$c"
+                break
+            fi
+        done
+    fi
+}
+
+ensure_terabox_conf() {
+    locate_bins
+    if [ ! -f "$RCLONE_CONF" ]; then
+        RCLONE_CONF="$INSTALL_DIR/rclone.conf"
+        cat <<EOF > "$RCLONE_CONF"
+[terabox]
+type = webdav
+url = http://127.0.0.1:5244/dav
+vendor = other
+user = admin
+pass = admin123
+EOF
+        chmod 600 "$RCLONE_CONF"
+    fi
+}
+
+start_alist() {
+    locate_bins
+    if [ ! -x "$ALIST_BIN" ]; then
+        echo "[!] AList binary not found. Skipping WebDAV daemon."
+        return 0
+    fi
+    if pgrep -f "$ALIST_BIN server" >/dev/null 2>&1; then
+        echo "[!] AList is already running on port 5244."
+        return 0
+    fi
+    echo "[*] Starting AList WebDAV Middleware..."
+    "$ALIST_BIN" admin set admin123 --data "$DATA_DIR" >/dev/null 2>&1 || true
+    nohup "$ALIST_BIN" server --data "$DATA_DIR" > "$DATA_DIR/alist.log" 2>&1 &
+    sleep 2
+    if pgrep -f "$ALIST_BIN server" >/dev/null 2>&1; then
+        echo "[✓] AList started successfully! (http://localhost:5244)"
+    else
+        echo "[X] Failed to start AList. Check $DATA_DIR/alist.log"
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# 3. AI DYNAMIC STORAGE SENTINEL
+# ------------------------------------------------------------------------------
+get_ai_cache_policy() {
+    DATA_FREE_KB=$(df -k /data 2>/dev/null | awk 'NR==2 {print $4}' || echo "10485760")
+    DATA_FREE_MB=$((DATA_FREE_KB / 1024))
+    
+    if [ "$DATA_FREE_MB" -gt 10240 ]; then
+        AI_CACHE_MODE="full"
+        AI_CACHE_MAX_SIZE="1G"
+        AI_CACHE_MAX_AGE="10m"
+        AI_POLICY_NAME="OPTIMAL (1GB Rolling LRU Cache, 10m auto-purge)"
+    elif [ "$DATA_FREE_MB" -gt 3072 ]; then
+        AI_CACHE_MODE="full"
+        AI_CACHE_MAX_SIZE="300M"
+        AI_CACHE_MAX_AGE="5m"
+        AI_POLICY_NAME="LIGHTWEIGHT (300MB Strict Cache, 5m auto-purge)"
+    else
+        AI_CACHE_MODE="off"
+        AI_CACHE_MAX_SIZE="0M"
+        AI_CACHE_MAX_AGE="1m"
+        AI_POLICY_NAME="ZERO-DISK (100% RAM Streaming, 0 Bytes Disk Cache Used)"
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# 4. MOUNT ENGINE (UNIVERSAL MULTI-NAMESPACE & SD CARD EMULATION)
+# ------------------------------------------------------------------------------
+mount_remote() {
+    ensure_root_namespace "$@"
+    locate_bins
+
+    REMOTE="${1:-terabox}"
+    if [ "$REMOTE" = "terabox" ]; then
+        ensure_terabox_conf
+        start_alist
+        FOLDER_NAME="TeraBox-CloudSSD"
+    elif [ "$REMOTE" = "gdrive" ]; then
+        FOLDER_NAME="GoogleDrive-CloudSSD"
+    else
+        FOLDER_NAME="${REMOTE}-CloudSSD"
+    fi
+
+    if [ ! -x "$RCLONE_BIN" ]; then
+        echo "[X] Error: rclone binary not found at $RCLONE_BIN"
+        return 1
+    fi
+
+    if [ ! -f "$RCLONE_CONF" ]; then
+        echo "[X] Error: rclone.conf not found. Run 'cloudssd config' first."
+        return 1
+    fi
+
+    BASE_MOUNT="/mnt/cloud/$REMOTE"
+    PRIMARY_STORAGE="/storage/emulated/0/$FOLDER_NAME"
+    SDCARD_ALIAS="/sdcard/$FOLDER_NAME"
+    DATA_MEDIA_PATH="/data/media/0/$FOLDER_NAME"
+    EXT_STORAGE="/storage/$FOLDER_NAME"
+
+    if mount | grep -q "$BASE_MOUNT"; then
+        echo "[!] $REMOTE is already mounted at $BASE_MOUNT"
+        return 0
+    fi
+
+    get_ai_cache_policy
+    echo "=========================================="
+    echo "  ☁️  Mounting $REMOTE as Cloud SSD        "
+    echo "=========================================="
+    echo "[*] Internal Storage Free: ${DATA_FREE_MB} MB"
+    echo "[*] AI Cache Policy:       $AI_POLICY_NAME"
+    echo "[*] Demand Paging:         Micro-chunks (4MB-32MB) on-demand"
+    echo "[*] Full Drive Download:   STRICTLY DISABLED (Zero Bloat)"
+
+    mkdir -p "$BASE_MOUNT" "$DATA_MEDIA_PATH" "$PRIMARY_STORAGE" "$SDCARD_ALIAS" "$EXT_STORAGE" 2>/dev/null || true
+    chown 1023:1023 "$DATA_MEDIA_PATH" 2>/dev/null || true
+    chmod 771 "$DATA_MEDIA_PATH" 2>/dev/null || true
+
+    # Launch Rclone FUSE
+    "$RCLONE_BIN" mount "${REMOTE}:" "$BASE_MOUNT" \
+        --config "$RCLONE_CONF" \
+        --cache-dir "$CACHE_DIR" \
+        --allow-other \
+        --allow-non-empty \
+        --gid 1023 \
+        --uid 1023 \
+        --dir-perms 0775 \
+        --file-perms 0664 \
+        --umask 002 \
+        --dir-cache-time 72h \
+        --attr-timeout 24h \
+        --vfs-cache-mode "$AI_CACHE_MODE" \
+        --vfs-cache-max-size "$AI_CACHE_MAX_SIZE" \
+        --vfs-cache-max-age "$AI_CACHE_MAX_AGE" \
+        --buffer-size 16M \
+        --vfs-read-chunk-size 4M \
+        --vfs-read-chunk-size-limit 32M \
+        --no-modtime \
+        --no-checksum \
+        --daemon \
+        --log-file "/data/local/tmp/rclone_${REMOTE}.log" \
+        --log-level NOTICE
+
+    sleep 2
+
+    if ! mount | grep -q "$BASE_MOUNT"; then
+        echo "[X] Mount failed. Check log at /data/local/tmp/rclone_${REMOTE}.log"
+        tail -n 15 "/data/local/tmp/rclone_${REMOTE}.log" 2>/dev/null || true
+        return 1
+    fi
+
+    # Activate .nomedia firewall
+    touch "$BASE_MOUNT/.nomedia" 2>/dev/null || true
+    chmod 644 "$BASE_MOUNT/.nomedia" 2>/dev/null || true
+    touch "$DATA_MEDIA_PATH/.nomedia" 2>/dev/null || true
+
+    # Propagate bind mounts into Android runtime namespaces
+    TARGETS=(
+        "$DATA_MEDIA_PATH"
+        "/mnt/runtime/default/emulated/0/$FOLDER_NAME"
+        "/mnt/runtime/read/emulated/0/$FOLDER_NAME"
+        "/mnt/runtime/write/emulated/0/$FOLDER_NAME"
+        "/mnt/pass_through/0/emulated/0/$FOLDER_NAME"
+        "$PRIMARY_STORAGE"
+        "$SDCARD_ALIAS"
+        "$EXT_STORAGE"
+    )
+
+    for tgt in "${TARGETS[@]}"; do
+        mkdir -p "$tgt" 2>/dev/null || true
+        mount -o bind "$BASE_MOUNT" "$tgt" 2>/dev/null || true
+    done
+
+    # Try Virtual SD Card Volume mount if enabled
+    if command -v sm >/dev/null 2>&1; then
+        sm set-virtual-disk true 2>/dev/null || true
+        VIRT_DISK=$(sm list-disks 2>/dev/null | grep -i "disk" | head -n 1 || true)
+        if [ -n "$VIRT_DISK" ]; then
+            VIRT_VOL=$(sm list-volumes public 2>/dev/null | grep -o "public:[0-9,]*" | head -n 1 || true)
+            if [ -z "$VIRT_VOL" ]; then
+                sm partition "$VIRT_DISK" public 2>/dev/null || true
+                sleep 1
+            fi
+            for p in /storage/*; do
+                if [ "$p" != "/storage/emulated" ] && [ "$p" != "/storage/self" ] && [ -d "$p" ]; then
+                    mount -o bind "$BASE_MOUNT" "$p" 2>/dev/null || true
+                fi
+            done
+        fi
+    fi
+
+    # Flush file manager apps so they reopen in updated namespace
+    for pkg in ru.zdevs.zarchiver \
+               com.mi.android.globalFileexplorer \
+               com.android.fileexplorer \
+               com.google.android.apps.nbu.files \
+               com.sec.android.app.myfiles \
+               com.mixplorer \
+               pl.solidexplorer2; do
+        am force-stop "$pkg" 2>/dev/null || true
+    done
+
+    am broadcast -a android.intent.action.MEDIA_MOUNTED -d "file:///sdcard/$FOLDER_NAME" >/dev/null 2>&1 || true
+
+    echo "[✓] SUCCESS: $REMOTE Cloud SSD mounted successfully!"
+    echo "    📁 Internal Storage: /sdcard/$FOLDER_NAME"
+    echo "    📁 Primary Storage:  $PRIMARY_STORAGE"
+    echo "    💾 External Storage: $EXT_STORAGE"
+    echo "    🛡️ .nomedia:         Active (Zero Gallery/MediaScanner spam)"
+}
+
+# ------------------------------------------------------------------------------
+# 5. UNMOUNT ENGINE
+# ------------------------------------------------------------------------------
+unmount_remote() {
+    ensure_root_namespace "$@"
+    REMOTE="${1:-terabox}"
+    if [ "$REMOTE" = "terabox" ]; then
+        FOLDER_NAME="TeraBox-CloudSSD"
+    elif [ "$REMOTE" = "gdrive" ]; then
+        FOLDER_NAME="GoogleDrive-CloudSSD"
+    else
+        FOLDER_NAME="${REMOTE}-CloudSSD"
+    fi
+
+    echo "[*] Unmounting $REMOTE ($FOLDER_NAME)..."
+
+    TARGETS=(
+        "/mnt/runtime/default/emulated/0/$FOLDER_NAME"
+        "/mnt/runtime/read/emulated/0/$FOLDER_NAME"
+        "/mnt/runtime/write/emulated/0/$FOLDER_NAME"
+        "/mnt/pass_through/0/emulated/0/$FOLDER_NAME"
+        "/data/media/0/$FOLDER_NAME"
+        "/storage/emulated/0/$FOLDER_NAME"
+        "/sdcard/$FOLDER_NAME"
+        "/storage/$FOLDER_NAME"
+        "/mnt/cloud/$REMOTE"
+    )
+
+    for tgt in "${TARGETS[@]}"; do
+        umount -l "$tgt" 2>/dev/null || true
+    done
+
+    pkill -9 -f "rclone mount.*$REMOTE:" 2>/dev/null || true
+    sleep 1
+
+    echo "[✓] $REMOTE unmounted cleanly."
+}
+
+stop_all() {
+    ensure_root_namespace "$@"
+    locate_bins
+    echo "[*] Unmounting all Cloud SSD drives..."
+    unmount_remote "terabox"
+    unmount_remote "gdrive"
+    for r in /mnt/cloud/*; do
+        [ -d "$r" ] && umount -l "$r" 2>/dev/null || true
+    done
+    pkill -9 -x rclone 2>/dev/null || true
+    if [ -x "$ALIST_BIN" ]; then
+        echo "[*] Stopping AList daemon..."
+        pkill -f "$ALIST_BIN server" 2>/dev/null || true
+    fi
+    rm -rf "$CACHE_DIR"/* 2>/dev/null || true
+    echo "[✓] All Cloud SSD services stopped and cache cleaned."
+}
+
+# ------------------------------------------------------------------------------
+# 6. SYSTEM STATUS & DIAGNOSTICS
+# ------------------------------------------------------------------------------
+show_status() {
+    locate_bins
+    get_ai_cache_policy
+
+    echo "=========================================="
+    echo "       ☁️ Cloud SSD System Status         "
+    echo "=========================================="
+    echo "Internal Free Space: $DATA_FREE_MB MB"
+    echo "Active AI Policy:    $AI_POLICY_NAME"
+    echo "------------------------------------------"
+
+    if pgrep -f "alist server" >/dev/null 2>&1; then
+        echo "AList Middleware:   [ RUNNING ] (Port 5244)"
+    else
+        echo "AList Middleware:   [ STOPPED ]"
+    fi
+
+    ACTIVE_MOUNTS=$(mount | grep -iE "rclone|CloudSSD" || true)
+    if [ -n "$ACTIVE_MOUNTS" ]; then
+        echo "Active Cloud Mounts:"
+        mount | grep -i "CloudSSD" | awk '{print "  -> " $3 " (" $1 ")"}' | sort -u
+    else
+        echo "Cloud SSD Mounts:   [ NONE ACTIVE ]"
+    fi
+
+    echo "------------------------------------------"
+    CACHE_SIZE=$(du -sh "$CACHE_DIR" 2>/dev/null | awk '{print $1}' || echo "0 MB")
+    echo "Cache Disk Usage:   $CACHE_SIZE (Cap: $AI_CACHE_MAX_SIZE)"
+    echo "=========================================="
+}
+
+# ------------------------------------------------------------------------------
+# 7. AI OPTIMIZE & CACHE PURGE
+# ------------------------------------------------------------------------------
+ai_optimize() {
+    ensure_root_namespace "$@"
+    get_ai_cache_policy
+    echo "=========================================="
+    echo "    🧠 Cloud SSD: AI Storage Optimizer    "
+    echo "=========================================="
+    echo "[*] Scanning phone internal storage..."
+    echo "[*] Free Space: $DATA_FREE_MB MB"
+    echo "[*] Recommending Policy: $AI_POLICY_NAME"
+
+    echo "[*] Cleaning orphaned chunk caches..."
+    rm -rf "$CACHE_DIR"/* 2>/dev/null || true
+    echo "[✓] Transient cache purged. 0 Bytes wasted."
+    echo "[*] Reinforcing .nomedia shields..."
+    for d in /mnt/cloud/* /data/media/0/*-CloudSSD; do
+        if [ -d "$d" ]; then
+            touch "$d/.nomedia" 2>/dev/null || true
+            chmod 644 "$d/.nomedia" 2>/dev/null || true
+        fi
+    done
+    echo "[✓] MediaScanner protected. All systems optimal."
+}
+
+# ------------------------------------------------------------------------------
+# 8. SDCARD MODE TOGGLE
+# ------------------------------------------------------------------------------
+toggle_sdcard_mode() {
+    ensure_root_namespace "$@"
+    if ! command -v sm >/dev/null 2>&1; then
+        echo "[X] sm (StorageManager) not found on this device."
+        return 1
+    fi
+
+    STATE="${1:-on}"
+    if [ "$STATE" = "on" ] || [ "$STATE" = "enable" ]; then
+        echo "[*] Enabling Android Virtual SD Card Volume..."
+        sm set-virtual-disk true
+        sleep 2
+        DISK=$(sm list-disks 2>/dev/null | grep -i "disk" | head -n 1 || true)
+        if [ -n "$DISK" ]; then
+            sm partition "$DISK" public 2>/dev/null || true
+            echo "[✓] Virtual SD Card created ($DISK)! Check Settings -> Storage."
+        else
+            echo "[!] Virtual disk flag set. Re-run 'cloudssd mount' to bind."
+        fi
+    else
+        echo "[*] Disabling Android Virtual SD Card Volume..."
+        sm set-virtual-disk false 2>/dev/null || true
+        echo "[✓] Virtual SD Card disabled."
+    fi
+}
+
+open_gui() {
+    echo "[*] Opening AList Dashboard in browser..."
+    am start -a android.intent.action.VIEW -d "http://localhost:5244" >/dev/null 2>&1 || true
+}
+
+config_remote() {
+    locate_bins
+    "$RCLONE_BIN" config --config "$RCLONE_CONF"
+}
+
+# ------------------------------------------------------------------------------
+# ENTRYPOINT DISPATCHER
+# ------------------------------------------------------------------------------
+case "$1" in
+    start)
+        start_alist
+        ;;
+    mount)
+        mount_remote "$2"
+        ;;
+    unmount|umount)
+        unmount_remote "$2"
+        ;;
+    stop)
+        stop_all
+        ;;
+    status)
+        show_status
+        ;;
+    ai-optimize|optimize)
+        ai_optimize
+        ;;
+    sdcard-mode|sdcard)
+        toggle_sdcard_mode "$2"
+        ;;
+    gui|web)
+        start_alist
+        open_gui
+        ;;
+    config)
+        config_remote
+        ;;
+    help|--help|-h|*)
+        echo "=========================================="
+        echo "   ☁️  Cloud SSD Master Controller v1.1.0 "
+        echo "=========================================="
+        echo "Usage: cloudssd <command> [argument]"
+        echo ""
+        echo "Commands:"
+        echo "  mount [gdrive|terabox|<remote>]  Mount cloud drive as SSD"
+        echo "  unmount [gdrive|terabox]         Cleanly unmount cloud drive"
+        echo "  status                          Show live status, AI policy & cache"
+        echo "  ai-optimize                     Run AI storage check & purge cache"
+        echo "  sdcard-mode [on|off]            Toggle Android native SD card volume"
+        echo "  stop                            Stop all mounts & background daemons"
+        echo "  web / gui                       Open AList dashboard in browser"
+        echo "  config                          Configure rclone remotes"
+        echo "=========================================="
+        ;;
+esac

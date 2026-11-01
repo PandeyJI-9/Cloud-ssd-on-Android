@@ -13,10 +13,15 @@ NC='\033[0m'
 REMOTE_NAME="${1:-gdrive}"
 FOLDER_NAME="GoogleDrive-CloudSSD"
 
+SELF_BIN="$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
+if [ ! -f "$SELF_BIN" ]; then
+    SELF_BIN="$(command -v "$0" 2>/dev/null || echo "$0")"
+fi
+
 # 1. Elevate to root & PID 1 Global Mount Namespace
 if [ "$(id -u)" -ne 0 ]; then
     if command -v su >/dev/null 2>&1; then
-        exec su -c "$0" "$@"
+        exec su -c "$SELF_BIN" "$@"
     fi
 fi
 
@@ -25,7 +30,7 @@ if [ -f "/proc/1/ns/mnt" ] && [ -f "/proc/self/ns/mnt" ]; then
     SELF_NS=$(readlink /proc/self/ns/mnt 2>/dev/null || echo "2")
     if [ "$INIT_NS" != "$SELF_NS" ]; then
         if command -v nsenter >/dev/null 2>&1; then
-            exec nsenter -t 1 -m -- "$0" "$@"
+            exec nsenter -t 1 -m -- "$SELF_BIN" "$@"
         fi
     fi
 fi

@@ -22,13 +22,18 @@ NC='\033[0m'
 REMOTE_NAME="${1:-gdrive}"
 FOLDER_NAME="GoogleDrive-CloudSSD"
 
+SELF_BIN="$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
+if [ ! -f "$SELF_BIN" ]; then
+    SELF_BIN="$(command -v "$0" 2>/dev/null || echo "$0")"
+fi
+
 # ------------------------------------------------------------------------------
 # 1. ROOT & PID 1 GLOBAL MOUNT NAMESPACE INJECTION
 # ------------------------------------------------------------------------------
 if [ "$(id -u)" -ne 0 ]; then
     if command -v su >/dev/null 2>&1; then
         echo -e "${YELLOW}[*] Elevating to root privileges...${NC}"
-        exec su -c "$0" "$@"
+        exec su -c "$SELF_BIN" "$@"
     else
         echo -e "${RED}[X] Root access is required to mount storage across Android apps.${NC}"
         exit 1
@@ -42,7 +47,7 @@ if [ -f "/proc/1/ns/mnt" ] && [ -f "/proc/self/ns/mnt" ]; then
     if [ "$INIT_NS" != "$SELF_NS" ]; then
         if command -v nsenter >/dev/null 2>&1; then
             echo -e "${CYAN}[*] Injecting into Android Global Mount Namespace (PID 1)...${NC}"
-            exec nsenter -t 1 -m -- "$0" "$@"
+            exec nsenter -t 1 -m -- "$SELF_BIN" "$@"
         fi
     fi
 fi

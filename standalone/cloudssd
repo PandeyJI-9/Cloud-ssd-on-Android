@@ -19,13 +19,18 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE" 2>/dev/null || true
 }
 
+SELF_BIN="$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
+if [ ! -f "$SELF_BIN" ]; then
+    SELF_BIN="$(command -v "$0" 2>/dev/null || echo "/data/cloudssd/cloudssd")"
+fi
+
 # ------------------------------------------------------------------------------
 # 1. ENSURE ROOT & PID 1 GLOBAL MOUNT NAMESPACE INJECTION
 # ------------------------------------------------------------------------------
 ensure_root_namespace() {
     if [ "$(id -u)" -ne 0 ]; then
         if command -v su >/dev/null 2>&1; then
-            exec su -c "$0" "$@"
+            exec su -c "$SELF_BIN" "$@"
         else
             echo "[X] Root access is required for Cloud SSD."
             exit 1
@@ -38,7 +43,7 @@ ensure_root_namespace() {
         SELF_NS=$(readlink /proc/self/ns/mnt 2>/dev/null || echo "2")
         if [ "$INIT_NS" != "$SELF_NS" ]; then
             if command -v nsenter >/dev/null 2>&1; then
-                exec nsenter -t 1 -m -- "$0" "$@"
+                exec nsenter -t 1 -m -- "$SELF_BIN" "$@"
             fi
         fi
     fi

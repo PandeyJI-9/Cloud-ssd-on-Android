@@ -34,14 +34,22 @@ echo "[3/4] Installing global 'cloudssd' CLI controller..."
 cp -f "$DIR/cloudssd" "$TARGET/cloudssd"
 chmod 755 "$TARGET/cloudssd"
 
-# Install into Termux bin if present
+# Install smart Termux wrapper (allows typing 'cloudssd' directly at ~ $)
 TERMUX_BIN="/data/data/com.termux/files/usr/bin"
 if [ -d "$TERMUX_BIN" ]; then
-    cp -f "$TARGET/cloudssd" "$TERMUX_BIN/cloudssd" 2>/dev/null && chmod 755 "$TERMUX_BIN/cloudssd" 2>/dev/null || true
+    cat <<'WRAPPER' > "$TERMUX_BIN/cloudssd"
+#!/data/data/com.termux/files/usr/bin/sh
+if [ "$(id -u)" -eq 0 ]; then
+    exec /data/cloudssd/cloudssd "$@"
+else
+    exec su -c "/data/cloudssd/cloudssd \"$@\""
+fi
+WRAPPER
+    chmod 755 "$TERMUX_BIN/cloudssd" 2>/dev/null || true
 fi
 
-# Link to other root PATH directories
-for p in /data/adb/ap/bin /data/adb/magisk /system/bin /sbin /data/local/tmp; do
+# Link to all root PATH directories so 'su -c cloudssd' also works
+for p in /data/adb/ap/bin /data/adb/magisk /data/adb/ksu/bin /sbin /data/local/tmp; do
     if [ -d "$p" ]; then
         cp -f "$TARGET/cloudssd" "$p/cloudssd" 2>/dev/null && chmod 755 "$p/cloudssd" 2>/dev/null || true
     fi
@@ -49,6 +57,14 @@ done
 
 cp -f "$TARGET/cloudssd" /data/local/tmp/cloudssd
 chmod 755 /data/local/tmp/cloudssd
+
+# Add alias to Termux profile if exists
+TERMUX_HOME="/data/data/com.termux/files/home"
+if [ -d "$TERMUX_HOME" ]; then
+    if ! grep -q "cloudssd" "$TERMUX_HOME/.bashrc" 2>/dev/null; then
+        echo 'alias cloudssd="su -c /data/cloudssd/cloudssd"' >> "$TERMUX_HOME/.bashrc" 2>/dev/null || true
+    fi
+fi
 
 echo "[4/4] Creating WebUI Dashboard shortcut..."
 cat <<'EOF' > /sdcard/CloudSSD-Dashboard.html

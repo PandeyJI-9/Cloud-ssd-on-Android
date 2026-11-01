@@ -17,12 +17,16 @@ rm -rf "$BUILD_DIR" "$OUTPUT_ZIP"
 mkdir -p "$BUILD_DIR/webroot"
 mkdir -p "$BUILD_DIR/META-INF/com/google/android"
 
-# 1. Copy manifests and scripts
+# 1. Copy manifests, scripts, and system binaries
 cp -f "$ROOT_DIR/magisk_module/module.prop" "$BUILD_DIR/"
 cp -f "$ROOT_DIR/magisk_module/service.sh" "$BUILD_DIR/"
 cp -f "$ROOT_DIR/magisk_module/customize.sh" "$BUILD_DIR/"
 cp -f "$ROOT_DIR/magisk_module/uninstall.sh" "$BUILD_DIR/"
 cp -rf "$ROOT_DIR/magisk_module/webroot/"* "$BUILD_DIR/webroot/"
+
+mkdir -p "$BUILD_DIR/system/bin"
+cp -f "$ROOT_DIR/standalone/cloudssd" "$BUILD_DIR/system/bin/cloudssd"
+chmod 755 "$BUILD_DIR/system/bin/cloudssd"
 
 # 2. Setup META-INF
 curl -sL --retry 3 --max-time 30 "https://cdn.jsdelivr.net/gh/topjohnwu/Magisk@master/scripts/module_installer.sh" \
