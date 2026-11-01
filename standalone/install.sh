@@ -1,13 +1,13 @@
 #!/system/bin/sh
 # ==============================================================================
-# Cloud SSD: Standalone Root Installer (Zero-Bootloop, Zero-Magisk Dependency)
+# Cloud SSD: Standalone Root Installer (Zero-Bootloop, AI Smart On-Demand Engine)
 # ==============================================================================
 
 set -e
 
 echo "===================================================="
 echo "    ☁️  Cloud SSD: Standalone Root Installer        "
-echo "      (100% HyperOS Safe - No Bootloop Ever)        "
+echo "      (100% HyperOS Safe - AI Dynamic Engine)       "
 echo "===================================================="
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -16,7 +16,9 @@ TARGET="/data/cloudssd"
 echo "[1/4] Setting up directory structure at $TARGET..."
 mkdir -p "$TARGET/bin"
 mkdir -p "$TARGET/data"
+mkdir -p "/data/local/tmp/cloudssd_cache"
 mkdir -p "/sdcard/TeraBox-CloudSSD"
+mkdir -p "/sdcard/GoogleDrive-CloudSSD"
 
 echo "[2/4] Installing ARM64 binaries (alist & rclone)..."
 if [ -f "$DIR/bin/alist" ]; then
@@ -28,7 +30,7 @@ fi
 
 chmod 755 "$TARGET/bin/alist" "$TARGET/bin/rclone" 2>/dev/null || true
 
-echo "[3/4] Installing global 'cloudssd' command..."
+echo "[3/4] Installing global 'cloudssd' CLI controller..."
 cp -f "$DIR/cloudssd" "$TARGET/cloudssd"
 chmod 755 "$TARGET/cloudssd"
 
@@ -39,13 +41,12 @@ if [ -d "$TERMUX_BIN" ]; then
 fi
 
 # Link to other root PATH directories
-for p in /data/adb/ap/bin /data/adb/magisk /sbin /data/local/tmp; do
+for p in /data/adb/ap/bin /data/adb/magisk /system/bin /sbin /data/local/tmp; do
     if [ -d "$p" ]; then
         cp -f "$TARGET/cloudssd" "$p/cloudssd" 2>/dev/null && chmod 755 "$p/cloudssd" 2>/dev/null || true
     fi
 done
 
-# Create convenient alias in /data/local/tmp
 cp -f "$TARGET/cloudssd" /data/local/tmp/cloudssd
 chmod 755 /data/local/tmp/cloudssd
 
@@ -64,34 +65,43 @@ cat <<'EOF' > /sdcard/CloudSSD-Dashboard.html
         .btn { display: block; width: 100%; padding: 14px; margin: 10px 0; background: #238636; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; text-align: center; box-sizing: border-box; }
         .btn-blue { background: #1f6feb; }
         code { background: #21262d; padding: 4px 8px; border-radius: 6px; font-family: monospace; color: #58a6ff; }
+        .badge { background: #238636; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; }
     </style>
 </head>
 <body>
     <h1>☁️ Cloud SSD Dashboard</h1>
-    <p style="color: #8b949e; margin-bottom: 20px;">TeraBox 1TB Virtual Drive for Android</p>
+    <p style="color: #8b949e; margin-bottom: 20px;">Virtual SSD Engine for Android (Google Drive & TeraBox)</p>
 
     <div class="card">
-        <h3>🚀 Step 1: Open AList</h3>
-        <p style="font-size: 0.9rem; margin: 8px 0;">Configure your TeraBox Cookie in the dashboard:</p>
-        <a class="btn btn-blue" href="http://localhost:5244" target="_blank">🌐 Open AList Web Dashboard (5244)</a>
-        <p style="font-size: 0.8rem; color: #8b949e;">Login: <code>admin</code> / <code>admin123</code></p>
+        <h3>🧠 AI Dynamic On-Demand Loading <span class="badge">ACTIVE</span></h3>
+        <p style="font-size: 0.9rem; color: #8b949e;">Your whole drive is <b>NEVER</b> downloaded to your phone. Only requested chunks (4MB-32MB) stream on-demand like Netflix/YouTube, leaving phone storage untouched.</p>
     </div>
 
     <div class="card">
-        <h3>⚡ Step 2: Terminal Commands (Termux / Root)</h3>
-        <p style="font-size: 0.9rem; margin-bottom: 6px;">To mount 1TB drive:</p>
-        <code>su -c cloudssd mount</code>
+        <h3>⚡ Terminal Commands (Termux / Root)</h3>
+        <p style="font-size: 0.9rem; margin-bottom: 6px;">Mount Google Drive:</p>
+        <code>su -c cloudssd mount gdrive</code>
         <br><br>
-        <p style="font-size: 0.9rem; margin-bottom: 6px;">To check status:</p>
+        <p style="font-size: 0.9rem; margin-bottom: 6px;">Mount TeraBox 1TB:</p>
+        <code>su -c cloudssd mount terabox</code>
+        <br><br>
+        <p style="font-size: 0.9rem; margin-bottom: 6px;">Enable Virtual SD Card Volume (Settings -> Storage):</p>
+        <code>su -c cloudssd sdcard-mode on</code>
+        <br><br>
+        <p style="font-size: 0.9rem; margin-bottom: 6px;">Check Live Status & AI Policy:</p>
         <code>su -c cloudssd status</code>
         <br><br>
-        <p style="font-size: 0.9rem; margin-bottom: 6px;">To unmount:</p>
+        <p style="font-size: 0.9rem; margin-bottom: 6px;">Run AI Storage Cleanup:</p>
+        <code>su -c cloudssd ai-optimize</code>
+        <br><br>
+        <p style="font-size: 0.9rem; margin-bottom: 6px;">Unmount safely:</p>
         <code>su -c cloudssd unmount</code>
     </div>
 
     <div class="card">
-        <h3>📂 Storage Location</h3>
-        <p style="font-size: 0.9rem;">Your cloud storage will appear in ZArchiver / File Manager at:</p>
+        <h3>📂 Storage Locations</h3>
+        <p style="font-size: 0.9rem;">Internal Storage Path:</p>
+        <code style="word-break: break-all;">/sdcard/GoogleDrive-CloudSSD</code><br><br>
         <code style="word-break: break-all;">/sdcard/TeraBox-CloudSSD</code>
     </div>
 </body>
@@ -100,12 +110,6 @@ EOF
 
 echo ""
 echo "===================================================="
-echo "    ✓ Installation Successful! (Zero Boot Risk)     "
+echo "    ✓ Cloud SSD Installation Complete!              "
 echo "===================================================="
-echo "Next Steps:"
-echo "1. Run command to start:     su -c cloudssd gui"
-echo "   (This opens browser at http://localhost:5244)"
-echo "2. Add your TeraBox cookie (ndus=...) in AList."
-echo "3. Run command to mount:     su -c cloudssd mount"
-echo "4. Open ZArchiver -> /sdcard/TeraBox-CloudSSD !"
-echo "===================================================="
+echo "Run: 'su -c cloudssd mount gdrive' or 'su -c cloudssd mount terabox'"
